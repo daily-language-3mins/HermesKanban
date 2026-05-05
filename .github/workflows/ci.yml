@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
+    env:
+      HERMES_AGENT_ROOT: ${{ github.workspace }}/.hermes/hermes-agent
+    steps:
+      - name: Checkout HermesKanban
+        uses: actions/checkout@v4
+
+      - name: Checkout Hermes Agent
+        uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          path: .hermes/hermes-agent
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Compile Python
+        run: uv run --extra test python -m compileall -q kanban_webui server.py bootstrap.py
+
+      - name: Run tests
+        run: uv run --extra test python -m pytest -q
+
+  static:
+    name: Static assets and design tokens
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout HermesKanban
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check static/api.js
+          node --check static/app.js
+          node --check static/board.js
+          node --check static/drawer.js
+          node --check static/dragdrop.js
+          node --check static/forms.js
+          node --check static/markdown.js
+          node --check static/mobile.js
+          node --check static/monitor.js
+
+      - name: Lint DESIGN.md
+        run: npx -y @google/design.md lint DESIGN.md

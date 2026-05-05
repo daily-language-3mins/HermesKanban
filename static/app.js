@@ -25,6 +25,8 @@ async function loadStatus() {
   document.getElementById('healthDot').classList.toggle('ok', status.ok);
   document.getElementById('healthText').textContent = status.ok ? 'OK' : 'Error';
   document.getElementById('dbPath').textContent = status.db_path || '';
+  const serverLabel = document.getElementById('serverLabel');
+  if (serverLabel) serverLabel.textContent = `${status.service || 'kanban-webui'} · ${window.location.host}`;
 }
 
 export async function load() {

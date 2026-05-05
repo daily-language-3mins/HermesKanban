@@ -2,12 +2,23 @@
 name = "hermes-kanban-webui"
 version = "0.1.0"
 description = "Standalone Trello-like WebUI for Hermes Kanban"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
   "fastapi",
   "uvicorn",
   "pydantic",
 ]
+
+[project.urls]
+Repository = "https://github.com/PriuS2/HermesKanban"
 
 [project.optional-dependencies]
 test = ["pytest", "httpx"]

@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP_DIR="/home/tjseh0091/workspace/HermesKanban"
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ ! -f "$DEFAULT_APP_DIR/server.py" ]]; then
+  DEFAULT_APP_DIR="$PWD"
+fi
+APP_DIR="${HERMES_KANBAN_WEBUI_APP_DIR:-$DEFAULT_APP_DIR}"
 HOST="${HERMES_KANBAN_WEBUI_HOST:-127.0.0.1}"
 PORT="${HERMES_KANBAN_WEBUI_PORT:-8790}"
-REAL_HOME="${HERMES_REAL_HOME:-/home/${USER:-tjseh0091}}"
+if [[ -n "${HERMES_REAL_HOME:-}" ]]; then
+  REAL_HOME="$HERMES_REAL_HOME"
+elif [[ -n "${USER:-}" && -d "/home/$USER" ]]; then
+  REAL_HOME="/home/$USER"
+else
+  REAL_HOME="${HOME:?HOME is not set}"
+fi
 STATE_DIR="${HERMES_KANBAN_WEBUI_STATE:-$REAL_HOME/.hermes/kanban-webui}"
 LOG_PATH="${HERMES_KANBAN_WEBUI_LOG:-$REAL_HOME/.hermes/logs/kanban-webui.log}"
 PID_FILE="$STATE_DIR/kanban-webui.pid"
+UV_BIN="${UV:-$(command -v uv || true)}"
+
+if [[ -z "$UV_BIN" ]]; then
+  echo "uv not found. Install uv or set UV=/path/to/uv." >&2
+  exit 1
+fi
+if [[ ! -f "$APP_DIR/server.py" ]]; then
+  echo "KanbanWebUI app directory not found: $APP_DIR" >&2
+  echo "Set HERMES_KANBAN_WEBUI_APP_DIR=/path/to/HermesKanban." >&2
+  exit 1
+fi
+
 mkdir -p "$STATE_DIR" "$(dirname "$LOG_PATH")"
 if [[ -f "$PID_FILE" ]]; then
   old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -15,13 +39,14 @@ if [[ -f "$PID_FILE" ]]; then
     exit 0
   fi
 fi
+
 cd "$APP_DIR"
-export HERMES_AGENT_ROOT="${HERMES_AGENT_ROOT:-/home/tjseh0091/.hermes/hermes-agent}"
+export HERMES_AGENT_ROOT="${HERMES_AGENT_ROOT:-$REAL_HOME/.hermes/hermes-agent}"
 export HERMES_KANBAN_WEBUI_HOST="$HOST"
 export HERMES_KANBAN_WEBUI_PORT="$PORT"
 export HERMES_KANBAN_WEBUI_STATE="$STATE_DIR"
 export HERMES_KANBAN_WEBUI_LOG="$LOG_PATH"
-nohup /home/tjseh0091/.local/bin/uv run python server.py --host "$HOST" --port "$PORT" >> "$LOG_PATH" 2>&1 &
+nohup "$UV_BIN" run python server.py --host "$HOST" --port "$PORT" >> "$LOG_PATH" 2>&1 &
 pid=$!
 echo "$pid" > "$PID_FILE"
 sleep 1

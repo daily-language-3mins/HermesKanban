@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REAL_HOME="${HERMES_REAL_HOME:-/home/${USER:-tjseh0091}}"
+
+if [[ -n "${HERMES_REAL_HOME:-}" ]]; then
+  REAL_HOME="$HERMES_REAL_HOME"
+elif [[ -n "${USER:-}" && -d "/home/$USER" ]]; then
+  REAL_HOME="/home/$USER"
+else
+  REAL_HOME="${HOME:?HOME is not set}"
+fi
 STATE_DIR="${HERMES_KANBAN_WEBUI_STATE:-$REAL_HOME/.hermes/kanban-webui}"
 PID_FILE="$STATE_DIR/kanban-webui.pid"
+
 if [[ ! -f "$PID_FILE" ]]; then
   echo "KanbanWebUI is not running (no pid file)"
   exit 0

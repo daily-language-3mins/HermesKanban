@@ -13,9 +13,9 @@ from pathlib import Path
 def ensure_hermes_importable() -> None:
     """Put the local Hermes checkout on sys.path when it is not installed.
 
-    tjseh0091's Hermes source normally lives at ~/.hermes/hermes-agent and is
-    already injected in Hermes sessions. The start script may run outside that
-    environment, so make path resolution explicit and predictable.
+    A Hermes source checkout commonly lives at ~/.hermes/hermes-agent and may
+    already be injected in Hermes sessions. The start script can run outside
+    that environment, so path resolution is explicit and predictable.
     """
     candidates = []
     env_root = os.environ.get("HERMES_AGENT_ROOT")

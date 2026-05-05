@@ -30,7 +30,7 @@ def _split_host(value: str) -> str:
 
 
 def _allowed_hostnames(settings) -> set[str]:
-    raw = os.environ.get("HERMES_KANBAN_WEBUI_ALLOWED_HOSTS", "hermes.tailafe8b6.ts.net")
+    raw = os.environ.get("HERMES_KANBAN_WEBUI_ALLOWED_HOSTS", "")
     names = {"localhost", "testserver", "127.0.0.1", "::1"}
     if settings.host not in {"0.0.0.0", "::", "[::]"}:
         names.add(settings.host)

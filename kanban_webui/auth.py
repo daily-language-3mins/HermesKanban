@@ -1,7 +1,7 @@
 """Optional bearer-token auth.
 
 Localhost-only operation is the default. If HERMES_KANBAN_WEBUI_TOKEN is set,
-all /api routes require either Authorization: Bearer *** or X-Kanban-Token.
+all /api routes require either Authorization: Bearer <token> or X-Kanban-Token.
 Tokens are intentionally not accepted in query strings.
 """
 from __future__ import annotations
