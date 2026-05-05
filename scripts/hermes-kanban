@@ -1,0 +1,425 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROGRAM="hermes-kanban"
+SERVICE_NAME="hermes-kanban.service"
+
+usage() {
+  cat <<'USAGE'
+Hermes KanbanWebUI helper
+
+Usage:
+  hermes-kanban <command> [args]
+
+Commands:
+  start                 Start KanbanWebUI in the background
+  stop                  Stop the background KanbanWebUI process
+  restart               Stop then start KanbanWebUI
+  status                Show process status and health
+  logs [tail-args]      Show the service log, e.g. logs -f
+  doctor                Check local prerequisites and configuration
+  open                  Open the WebUI URL in the desktop browser
+  url                   Print the configured WebUI URL
+  serve                 Run foreground server; intended for systemd
+  service install       Install a systemd user service
+  service uninstall     Remove the systemd user service
+  service start         Start the systemd user service
+  service stop          Stop the systemd user service
+  service restart       Restart the systemd user service
+  service status        Show systemd user service status
+
+Configuration:
+  HERMES_KANBAN_WEBUI_ENV        Env file path; default ~/.hermes/kanban-webui.env
+  HERMES_KANBAN_WEBUI_APP_DIR    HermesKanban checkout path
+  HERMES_KANBAN_WEBUI_HOST       Bind host; default 127.0.0.1
+  HERMES_KANBAN_WEBUI_PORT       Port; default 8790
+  HERMES_AGENT_ROOT              Hermes Agent checkout; default ~/.hermes/hermes-agent
+
+Aliases:
+  HERMES_KANBAN_HOST and HERMES_KANBAN_PORT are accepted as short aliases.
+USAGE
+}
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+info() {
+  echo "$*"
+}
+
+real_home() {
+  if [[ -n "${HERMES_REAL_HOME:-}" ]]; then
+    printf '%s\n' "$HERMES_REAL_HOME"
+  elif [[ -n "${USER:-}" && -d "/home/$USER" ]]; then
+    printf '%s\n' "/home/$USER"
+  else
+    printf '%s\n' "${HOME:?HOME is not set}"
+  fi
+}
+
+REAL_HOME="$(real_home)"
+DEFAULT_ENV_FILE="$REAL_HOME/.hermes/kanban-webui.env"
+ENV_FILE="${HERMES_KANBAN_WEBUI_ENV:-$DEFAULT_ENV_FILE}"
+
+source_env() {
+  if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+  fi
+}
+
+script_dir() {
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
+}
+
+resolve_app_dir() {
+  if [[ -n "${HERMES_KANBAN_WEBUI_APP_DIR:-}" ]]; then
+    printf '%s\n' "$HERMES_KANBAN_WEBUI_APP_DIR"
+    return
+  fi
+
+  local dir parent
+  dir="$(script_dir)"
+  parent="$(cd "$dir/.." 2>/dev/null && pwd || true)"
+  if [[ -n "$parent" && -f "$parent/server.py" ]]; then
+    printf '%s\n' "$parent"
+    return
+  fi
+
+  if [[ -f "$PWD/server.py" ]]; then
+    printf '%s\n' "$PWD"
+    return
+  fi
+
+  if [[ -f "$REAL_HOME/.local/share/hermes-kanban/server.py" ]]; then
+    printf '%s\n' "$REAL_HOME/.local/share/hermes-kanban"
+    return
+  fi
+
+  die "Cannot locate HermesKanban checkout. Set HERMES_KANBAN_WEBUI_APP_DIR in $ENV_FILE."
+}
+
+normalize_runtime_env() {
+  HOST="${HERMES_KANBAN_WEBUI_HOST:-${HERMES_KANBAN_HOST:-127.0.0.1}}"
+  PORT="${HERMES_KANBAN_WEBUI_PORT:-${HERMES_KANBAN_PORT:-8790}}"
+  STATE_DIR="${HERMES_KANBAN_WEBUI_STATE:-$REAL_HOME/.hermes/kanban-webui}"
+  LOG_PATH="${HERMES_KANBAN_WEBUI_LOG:-$REAL_HOME/.hermes/logs/kanban-webui.log}"
+  PID_FILE="$STATE_DIR/kanban-webui.pid"
+  UV_BIN="${UV:-$(command -v uv || true)}"
+  APP_DIR="$(resolve_app_dir)"
+
+  export HERMES_REAL_HOME="${HERMES_REAL_HOME:-$REAL_HOME}"
+  export HERMES_AGENT_ROOT="${HERMES_AGENT_ROOT:-$REAL_HOME/.hermes/hermes-agent}"
+  export HERMES_KANBAN_WEBUI_APP_DIR="$APP_DIR"
+  export HERMES_KANBAN_WEBUI_HOST="$HOST"
+  export HERMES_KANBAN_WEBUI_PORT="$PORT"
+  export HERMES_KANBAN_WEBUI_STATE="$STATE_DIR"
+  export HERMES_KANBAN_WEBUI_LOG="$LOG_PATH"
+}
+
+require_app() {
+  [[ -f "$APP_DIR/server.py" ]] || die "server.py not found in app dir: $APP_DIR"
+}
+
+require_uv() {
+  [[ -n "$UV_BIN" ]] || die "uv not found. Install uv or set UV=/absolute/path/to/uv."
+}
+
+start_cmd() {
+  source_env
+  normalize_runtime_env
+  require_app
+  if [[ -x "$APP_DIR/scripts/hermes-kanban-webui-start" ]]; then
+    exec "$APP_DIR/scripts/hermes-kanban-webui-start"
+  fi
+
+  require_uv
+  mkdir -p "$STATE_DIR" "$(dirname "$LOG_PATH")"
+  if [[ -f "$PID_FILE" ]]; then
+    local old_pid
+    old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      info "KanbanWebUI already running: pid=$old_pid url=http://$HOST:$PORT"
+      return 0
+    fi
+  fi
+
+  cd "$APP_DIR"
+  nohup "$UV_BIN" run python server.py --host "$HOST" --port "$PORT" >> "$LOG_PATH" 2>&1 &
+  local pid=$!
+  echo "$pid" > "$PID_FILE"
+  sleep 1
+  if kill -0 "$pid" 2>/dev/null; then
+    info "KanbanWebUI started: pid=$pid url=http://$HOST:$PORT log=$LOG_PATH"
+  else
+    die "KanbanWebUI failed to start; see $LOG_PATH"
+  fi
+}
+
+stop_cmd() {
+  source_env
+  normalize_runtime_env
+  if [[ -x "$APP_DIR/scripts/hermes-kanban-webui-stop" ]]; then
+    exec "$APP_DIR/scripts/hermes-kanban-webui-stop"
+  fi
+
+  if [[ ! -f "$PID_FILE" ]]; then
+    info "KanbanWebUI is not running (no pid file)"
+    return 0
+  fi
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    rm -f "$PID_FILE"
+    info "KanbanWebUI is not running"
+    return 0
+  fi
+  kill "$pid"
+  for _ in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$PID_FILE"
+      info "KanbanWebUI stopped"
+      return 0
+    fi
+    sleep 0.2
+  done
+  kill -9 "$pid" 2>/dev/null || true
+  rm -f "$PID_FILE"
+  info "KanbanWebUI force-stopped"
+}
+
+serve_cmd() {
+  source_env
+  normalize_runtime_env
+  require_app
+  require_uv
+  cd "$APP_DIR"
+  exec "$UV_BIN" run python server.py --host "$HOST" --port "$PORT"
+}
+
+url_cmd() {
+  source_env
+  normalize_runtime_env
+  printf 'http://%s:%s\n' "$HOST" "$PORT"
+}
+
+status_cmd() {
+  source_env
+  normalize_runtime_env
+  info "app_dir=$APP_DIR"
+  info "env_file=$ENV_FILE"
+  info "url=http://$HOST:$PORT"
+  info "state_dir=$STATE_DIR"
+  info "log_path=$LOG_PATH"
+  if [[ -f "$PID_FILE" ]]; then
+    local pid
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      info "process=running pid=$pid"
+    else
+      info "process=stale pid_file=$PID_FILE"
+    fi
+  else
+    info "process=stopped"
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 2 "http://$HOST:$PORT/health" || true
+    echo
+  fi
+}
+
+logs_cmd() {
+  source_env
+  normalize_runtime_env
+  mkdir -p "$(dirname "$LOG_PATH")"
+  if [[ ! -f "$LOG_PATH" ]]; then
+    info "No log file yet: $LOG_PATH"
+    return 0
+  fi
+  if [[ "$#" -eq 0 ]]; then
+    tail -n 80 "$LOG_PATH"
+  else
+    tail "$@" "$LOG_PATH"
+  fi
+}
+
+open_cmd() {
+  local url
+  url="$(url_cmd)"
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "Start-Process '$url'" >/dev/null 2>&1 || info "$url"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 || info "$url"
+  elif command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 || info "$url"
+  else
+    info "$url"
+  fi
+}
+
+doctor_cmd() {
+  source_env
+  normalize_runtime_env
+  local failures=0
+  local warnings=0
+
+  ok() { echo "[OK] $*"; }
+  warn() { echo "[WARN] $*"; warnings=$((warnings + 1)); }
+  fail() { echo "[FAIL] $*"; failures=$((failures + 1)); }
+
+  if command -v python3 >/dev/null 2>&1; then
+    if python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+      ok "Python >= 3.11: $(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+    else
+      fail "Python 3.11+ is required"
+    fi
+  else
+    fail "python3 not found"
+  fi
+
+  if [[ -n "$UV_BIN" ]]; then
+    ok "uv: $UV_BIN"
+  else
+    fail "uv not found"
+  fi
+
+  if [[ -f "$APP_DIR/server.py" && -f "$APP_DIR/pyproject.toml" ]]; then
+    ok "app dir: $APP_DIR"
+  else
+    fail "app dir missing server.py/pyproject.toml: $APP_DIR"
+  fi
+
+  if command -v hermes >/dev/null 2>&1; then
+    ok "Hermes CLI: $(command -v hermes)"
+  elif [[ -f "$HERMES_AGENT_ROOT/hermes_cli/kanban_db.py" ]]; then
+    ok "Hermes Agent root: $HERMES_AGENT_ROOT"
+  else
+    fail "Hermes not found. Install Hermes or set HERMES_AGENT_ROOT."
+  fi
+
+  mkdir -p "$STATE_DIR" "$(dirname "$LOG_PATH")" || fail "cannot create state/log dirs"
+  [[ -w "$STATE_DIR" ]] && ok "state writable: $STATE_DIR" || fail "state not writable: $STATE_DIR"
+  [[ -w "$(dirname "$LOG_PATH")" ]] && ok "log dir writable: $(dirname "$LOG_PATH")" || fail "log dir not writable: $(dirname "$LOG_PATH")"
+
+  if command -v python3 >/dev/null 2>&1; then
+    if HERMES_KANBAN_WEBUI_HOST="$HOST" HERMES_KANBAN_WEBUI_PORT="$PORT" python3 - <<'PY'
+import os, socket, sys
+host = os.environ['HERMES_KANBAN_WEBUI_HOST']
+port = int(os.environ['HERMES_KANBAN_WEBUI_PORT'])
+s = socket.socket()
+s.settimeout(0.5)
+try:
+    result = s.connect_ex((host, port))
+finally:
+    s.close()
+sys.exit(0 if result != 0 else 1)
+PY
+    then
+      ok "port available: $HOST:$PORT"
+    else
+      warn "port already has a listener: $HOST:$PORT"
+    fi
+  fi
+
+  info "URL: http://$HOST:$PORT"
+  info "Env: $ENV_FILE"
+
+  if (( failures > 0 )); then
+    info "Doctor failed with $failures failure(s) and $warnings warning(s)."
+    return 1
+  fi
+  info "Doctor passed with $warnings warning(s)."
+}
+
+service_unit_path() {
+  printf '%s/systemd/user/%s\n' "${XDG_CONFIG_HOME:-$REAL_HOME/.config}" "$SERVICE_NAME"
+}
+
+service_install() {
+  source_env
+  normalize_runtime_env
+  local unit_path wrapper_path unit_dir
+  unit_path="$(service_unit_path)"
+  unit_dir="$(dirname "$unit_path")"
+  if command -v "$PROGRAM" >/dev/null 2>&1; then
+    wrapper_path="$(command -v "$PROGRAM")"
+  else
+    wrapper_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+  fi
+  mkdir -p "$unit_dir"
+  cat > "$unit_path" <<EOF
+[Unit]
+Description=Hermes KanbanWebUI
+After=network.target
+
+[Service]
+Type=simple
+Environment=HERMES_KANBAN_WEBUI_ENV=$ENV_FILE
+ExecStart=$wrapper_path serve
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+  info "Installed $unit_path"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user daemon-reload || true
+    info "Run: hermes-kanban service start"
+  else
+    info "systemctl not found; use hermes-kanban start instead."
+  fi
+}
+
+service_uninstall() {
+  local unit_path
+  unit_path="$(service_unit_path)"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
+    systemctl --user disable "$SERVICE_NAME" 2>/dev/null || true
+  fi
+  rm -f "$unit_path"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user daemon-reload || true
+  fi
+  info "Removed $unit_path"
+}
+
+service_cmd() {
+  local sub="${1:-}"
+  case "$sub" in
+    install) service_install ;;
+    uninstall|remove) service_uninstall ;;
+    start|stop|restart|status)
+      command -v systemctl >/dev/null 2>&1 || die "systemctl not found; use hermes-kanban $sub instead."
+      systemctl --user "$sub" "$SERVICE_NAME"
+      ;;
+    *)
+      die "Usage: hermes-kanban service {install|uninstall|start|stop|restart|status}"
+      ;;
+  esac
+}
+
+cmd="${1:-}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+case "$cmd" in
+  start) start_cmd "$@" ;;
+  stop) stop_cmd "$@" ;;
+  restart) stop_cmd || true; start_cmd "$@" ;;
+  status) status_cmd "$@" ;;
+  logs) logs_cmd "$@" ;;
+  doctor) doctor_cmd "$@" ;;
+  open) open_cmd "$@" ;;
+  url) url_cmd "$@" ;;
+  serve) serve_cmd "$@" ;;
+  service) service_cmd "$@" ;;
+  -h|--help|help|"") usage ;;
+  *) die "Unknown command: $cmd" ;;
+esac

@@ -35,19 +35,31 @@ If Hermes is not importable from your Python environment, set
 export HERMES_AGENT_ROOT="$HOME/.hermes/hermes-agent"
 ```
 
-## Quick start from Git
+## Quick install from Git
 
 ```bash
-git clone https://github.com/PriuS2/HermesKanban.git
-cd HermesKanban
-
-# Only needed if hermes_cli is not already importable.
-export HERMES_AGENT_ROOT="$HOME/.hermes/hermes-agent"
-
-uv run python server.py --host 127.0.0.1 --port 8790
+git clone https://github.com/PriuS2/HermesKanban.git ~/.local/share/hermes-kanban
+cd ~/.local/share/hermes-kanban
+./scripts/install.sh
+hermes-kanban doctor
+hermes-kanban start
 ```
 
 Open <http://127.0.0.1:8790>.
+
+The installer creates/uses:
+
+- `~/.local/bin/hermes-kanban` — lifecycle command wrapper.
+- `~/.hermes/kanban-webui.env` — local configuration copied from `.env.example`.
+- `~/.hermes/kanban-webui/` — pid/state directory.
+- `~/.hermes/logs/kanban-webui.log` — service log.
+
+Manual clone-and-run still works if you prefer not to install the wrapper:
+
+```bash
+export HERMES_AGENT_ROOT="$HOME/.hermes/hermes-agent"
+uv run python server.py --host 127.0.0.1 --port 8790
+```
 
 `uv run` creates/uses `.venv` automatically from `pyproject.toml`.
 
@@ -56,8 +68,11 @@ Open <http://127.0.0.1:8790>.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `HERMES_AGENT_ROOT` | unset | Hermes Agent checkout containing `hermes_cli/kanban_db.py` when Hermes is not installed/importable. |
+| `HERMES_KANBAN_WEBUI_APP_DIR` | repo checkout path | HermesKanban checkout used by the `hermes-kanban` wrapper. |
+| `HERMES_KANBAN_WEBUI_ENV` | `$REAL_HOME/.hermes/kanban-webui.env` | Env file sourced by the `hermes-kanban` wrapper. |
 | `HERMES_KANBAN_WEBUI_HOST` | `127.0.0.1` | Bind host. Keep loopback unless you have a trusted reverse proxy/Tailscale-only proxy. |
 | `HERMES_KANBAN_WEBUI_PORT` | `8790` | HTTP port. |
+| `HERMES_KANBAN_HOST` / `HERMES_KANBAN_PORT` | unset | Short aliases accepted by the wrapper; exported as `HERMES_KANBAN_WEBUI_*`. |
 | `HERMES_KANBAN_WEBUI_STATE` | `$REAL_HOME/.hermes/kanban-webui` | Runtime state directory for pid files and local service metadata. |
 | `HERMES_KANBAN_WEBUI_LOG` | `$REAL_HOME/.hermes/logs/kanban-webui.log` | Log file used by the helper script. |
 | `HERMES_KANBAN_WEBUI_TOKEN` | unset | Optional API token. When set, `/api/*` and `/service/status` require auth. |
@@ -67,48 +82,65 @@ Open <http://127.0.0.1:8790>.
 State/log defaults resolve to the real OS home when possible, not to Hermes'
 profile HOME such as `~/.hermes/profiles/<profile>/home`.
 
-## Start/stop helper scripts
+## Lifecycle command
 
-Run from a checked-out repo:
+After `./scripts/install.sh`, manage the app with:
+
+```bash
+hermes-kanban start
+hermes-kanban status
+hermes-kanban logs
+hermes-kanban logs -f
+hermes-kanban restart
+hermes-kanban stop
+hermes-kanban open
+```
+
+Run diagnostics:
+
+```bash
+hermes-kanban doctor
+```
+
+The wrapper reads `~/.hermes/kanban-webui.env` by default. To use another env
+file:
+
+```bash
+HERMES_KANBAN_WEBUI_ENV=/path/to/kanban-webui.env hermes-kanban start
+```
+
+The legacy repo-local scripts remain available:
 
 ```bash
 scripts/hermes-kanban-webui-start
 scripts/hermes-kanban-webui-stop
 ```
 
-If you copy the scripts to another directory such as `~/.local/bin`, also set
-`HERMES_KANBAN_WEBUI_APP_DIR`:
-
-```bash
-export HERMES_KANBAN_WEBUI_APP_DIR="$HOME/workspace/HermesKanban"
-hermes-kanban-webui-start
-```
+If you copy only those legacy scripts to another directory such as
+`~/.local/bin`, also set `HERMES_KANBAN_WEBUI_APP_DIR`.
 
 The start script uses `uv` from `PATH`, or `UV=/absolute/path/to/uv` if you need
 to override it.
 
 ## systemd user service
 
-A user-service template is provided at
-`deploy/systemd/hermes-kanban-webui.service`.
-
-Default assumptions in the template:
-
-- repo checkout: `~/workspace/HermesKanban`
-- Hermes checkout: `~/.hermes/hermes-agent`
-- uv path available through `%h/.local/bin`
-- bind address: `127.0.0.1:8790`
-
-Install:
+The preferred install path is generated from your env file:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp deploy/systemd/hermes-kanban-webui.service ~/.config/systemd/user/
-# Edit WorkingDirectory/HERMES_AGENT_ROOT if your paths differ.
-systemctl --user daemon-reload
-systemctl --user enable --now hermes-kanban-webui.service
-systemctl --user status hermes-kanban-webui.service
+hermes-kanban service install
+hermes-kanban service start
+hermes-kanban service status
 ```
+
+This creates `~/.config/systemd/user/hermes-kanban.service` with
+`HERMES_KANBAN_WEBUI_ENV=~/.hermes/kanban-webui.env` and runs
+`hermes-kanban serve` in the foreground, which is systemd-friendly.
+
+If your Linux/WSL environment does not run systemd, use `hermes-kanban start`
+instead. A static template is also available at
+`deploy/systemd/hermes-kanban.service.template`; the older
+`deploy/systemd/hermes-kanban-webui.service` is kept for compatibility with
+manual installs.
 
 ## Optional auth
 
