@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v0.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          elif [[ -n "$INPUT_TAG" ]]; then
+            tag="$INPUT_TAG"
+          else
+            version="$(python - <<'PY'
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['version'])
+          PY
+          )"
+            tag="v${version}"
+          fi
+          git fetch --tags --force
+          git rev-parse --verify --quiet "refs/tags/${tag}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          version="${tag#v}"
+          python - "$version" <<'PY' > /tmp/release-notes.md
+          import re
+          import sys
+          from pathlib import Path
+          version = sys.argv[1]
+          text = Path('CHANGELOG.md').read_text(encoding='utf-8')
+          pattern = rf'^## \[{re.escape(version)}\].*?$\n(?P<body>.*?)(?=^## \[|\Z)'
+          match = re.search(pattern, text, re.M | re.S)
+          if match:
+              body = match.group('body').strip()
+          else:
+              body = f'Release {version}'
+          print(body)
+          PY
+
+      - name: Create release if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+            exit 0
+          fi
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes-file /tmp/release-notes.md \
+            --verify-tag
