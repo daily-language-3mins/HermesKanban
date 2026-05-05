@@ -41,6 +41,12 @@ export const api = {
   task: (board, id) => request(`/api/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ board })}`),
   updateTask: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ board })}`, { method: 'PATCH', body: payload }),
   comment: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}/comments?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
+  linkTask: (board, payload) => request(`/api/links?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
+  unlinkTask: (board, parentId, childId) => request(`/api/links?${new URLSearchParams({ board, parent_id: parentId, child_id: childId })}`, { method: 'DELETE' }),
+  taskLog: (board, id, tail = 100000) => request(`/api/tasks/${encodeURIComponent(id)}/log?${new URLSearchParams({ board, tail })}`),
+  homeChannels: (board, id) => request(`/api/home-channels?${new URLSearchParams({ board, task_id: id })}`),
+  subscribeHome: (board, id, platform) => request(`/api/tasks/${encodeURIComponent(id)}/home-subscribe/${encodeURIComponent(platform)}?${new URLSearchParams({ board })}`, { method: 'POST' }),
+  unsubscribeHome: (board, id, platform) => request(`/api/tasks/${encodeURIComponent(id)}/home-subscribe/${encodeURIComponent(platform)}?${new URLSearchParams({ board })}`, { method: 'DELETE' }),
   monitor: (board, id) => request(`/api/tasks/${encodeURIComponent(id)}/monitor?${new URLSearchParams({ board, tail: 65536 })}`),
   events: (board, since = 0) => request(`/api/events?${new URLSearchParams({ board, since })}`)
 };

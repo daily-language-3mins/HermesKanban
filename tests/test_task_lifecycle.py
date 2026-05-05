@@ -13,6 +13,7 @@ def test_task_lifecycle_comments_links_and_bulk(client):
 
     board = client.get('/api/board').json()
     assert any(t['id'] == parent for t in board['tasks'])
+    assert {'parent_id': parent, 'child_id': child} in board['links']
     assert board['columns']['todo'][0]['id'] == child
 
     assigned = client.post(f'/api/tasks/{child}/assign', json={'assignee': 'reviewer'})
@@ -41,6 +42,37 @@ def test_task_lifecycle_comments_links_and_bulk(client):
     bulk = client.post('/api/tasks/bulk-create', json={'lines': 'A\nB\nC', 'defaults': {'assignee': 'dev'}})
     assert bulk.status_code == 200, bulk.text
     assert bulk.json()['created'] == 3
+
+
+def test_home_channel_subscription_toggle_matches_dashboard(client, monkeypatch, tmp_path):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes-home'))
+    monkeypatch.setenv('DISCORD_BOT_TOKEN', 'dummy-token')
+    monkeypatch.setenv('DISCORD_HOME_CHANNEL', 'discord-home')
+    monkeypatch.setenv('DISCORD_HOME_CHANNEL_NAME', 'Discord Home')
+    monkeypatch.setenv('DISCORD_HOME_CHANNEL_THREAD_ID', 'thread-1')
+
+    task_id = _create(client, 'Notify me')
+
+    homes = client.get('/api/home-channels', params={'task_id': task_id})
+    assert homes.status_code == 200, homes.text
+    discord = next(h for h in homes.json()['home_channels'] if h['platform'] == 'discord')
+    assert discord == {
+        'platform': 'discord',
+        'chat_id': 'discord-home',
+        'thread_id': 'thread-1',
+        'name': 'Discord Home',
+        'subscribed': False,
+    }
+
+    subscribed = client.post(f'/api/tasks/{task_id}/home-subscribe/discord')
+    assert subscribed.status_code == 200, subscribed.text
+    homes = client.get('/api/home-channels', params={'task_id': task_id}).json()['home_channels']
+    assert next(h for h in homes if h['platform'] == 'discord')['subscribed'] is True
+
+    unsubscribed = client.delete(f'/api/tasks/{task_id}/home-subscribe/discord')
+    assert unsubscribed.status_code == 200, unsubscribed.text
+    homes = client.get('/api/home-channels', params={'task_id': task_id}).json()['home_channels']
+    assert next(h for h in homes if h['platform'] == 'discord')['subscribed'] is False
 
 
 def test_invalid_create_status_does_not_persist_task(client):

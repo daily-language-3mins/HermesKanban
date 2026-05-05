@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from typing import Any, Iterable, Optional
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -154,6 +156,158 @@ class NotifyBody(BaseModel):
     chat_id: str = "kanban-webui"
     thread_id: Optional[str] = None
     user_id: Optional[str] = None
+
+
+HOME_CHANNEL_ENVS = {
+    "telegram": "TELEGRAM_HOME_CHANNEL",
+    "discord": "DISCORD_HOME_CHANNEL",
+    "slack": "SLACK_HOME_CHANNEL",
+    "signal": "SIGNAL_HOME_CHANNEL",
+    "mattermost": "MATTERMOST_HOME_CHANNEL",
+    "sms": "SMS_HOME_CHANNEL",
+    "dingtalk": "DINGTALK_HOME_CHANNEL",
+    "feishu": "FEISHU_HOME_CHANNEL",
+    "wecom": "WECOM_HOME_CHANNEL",
+    "weixin": "WEIXIN_HOME_CHANNEL",
+    "bluebubbles": "BLUEBUBBLES_HOME_CHANNEL",
+    "qqbot": "QQBOT_HOME_CHANNEL",
+    "yuanbao": "YUANBAO_HOME_CHANNEL",
+}
+LEGACY_HOME_CHANNEL_ENVS = {"qqbot": "QQ_HOME_CHANNEL"}
+
+
+def _add_home_channel(result: list[dict[str, str]], seen: set[str], *, platform: str, chat_id: Any, name: Any = None, thread_id: Any = None) -> None:
+    platform_name = str(platform or "").strip().lower()
+    chat_text = str(chat_id or "").strip()
+    if not platform_name or not chat_text or platform_name in seen:
+        return
+    result.append(
+        {
+            "platform": platform_name,
+            "chat_id": chat_text,
+            "thread_id": str(thread_id or ""),
+            "name": str(name or "Home"),
+        }
+    )
+    seen.add(platform_name)
+
+
+def _yaml_scalar(value: str) -> str:
+    text = value.split("#", 1)[0].strip()
+    if (text.startswith("'") and text.endswith("'")) or (text.startswith('"') and text.endswith('"')):
+        return text[1:-1]
+    return text
+
+
+def _config_paths() -> list[Path]:
+    paths: list[Path] = []
+    if os.getenv("HERMES_CONFIG"):
+        paths.append(Path(os.environ["HERMES_CONFIG"]).expanduser())
+    if os.getenv("HERMES_HOME"):
+        paths.append(Path(os.environ["HERMES_HOME"]).expanduser() / "config.yaml")
+    if os.getenv("USER"):
+        paths.append(Path("/home") / os.environ["USER"] / ".hermes" / "config.yaml")
+    paths.append(Path.home() / ".hermes" / "config.yaml")
+    unique: list[Path] = []
+    for path in paths:
+        if path not in unique:
+            unique.append(path)
+    return unique
+
+
+def _add_home_channels_from_config(result: list[dict[str, str]], seen: set[str]) -> None:
+    """Small YAML fallback for WebUI venvs without PyYAML/gateway deps."""
+    for path in _config_paths():
+        if not path.is_file():
+            continue
+        current_platform: Optional[str] = None
+        current_indent = 0
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+                continue
+            indent = len(raw_line) - len(raw_line.lstrip())
+            line = raw_line.strip()
+            if indent == 0 and line.endswith(":"):
+                candidate = line[:-1].strip().lower()
+                current_platform = candidate if candidate in HOME_CHANNEL_ENVS else None
+                current_indent = indent
+                continue
+            if indent == 0:
+                current_platform = None
+                for platform, env_name in HOME_CHANNEL_ENVS.items():
+                    if line.startswith(f"{env_name}:"):
+                        _add_home_channel(result, seen, platform=platform, chat_id=_yaml_scalar(line.split(":", 1)[1]))
+                continue
+            if current_platform and indent > current_indent and line.startswith("home_channel:"):
+                _add_home_channel(result, seen, platform=current_platform, chat_id=_yaml_scalar(line.split(":", 1)[1]))
+        break
+
+
+def _configured_home_channels() -> list[dict[str, str]]:
+    """Return gateway home channels available for dashboard-style toggles.
+
+    Prefer Hermes' GatewayConfig when importable, then documented env vars, then
+    a tiny config.yaml fallback for this standalone WebUI's lean virtualenv.
+    """
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    try:
+        from gateway.config import load_gateway_config
+
+        gw_cfg = load_gateway_config()
+        for platform, pcfg in (getattr(gw_cfg, "platforms", {}) or {}).items():
+            home = getattr(pcfg, "home_channel", None)
+            if not home:
+                continue
+            platform_name = getattr(platform, "value", str(platform))
+            _add_home_channel(
+                result,
+                seen,
+                platform=platform_name,
+                chat_id=getattr(home, "chat_id", ""),
+                thread_id=getattr(home, "thread_id", None),
+                name=getattr(home, "name", None),
+            )
+    except Exception:
+        pass
+
+    for platform, env_name in HOME_CHANNEL_ENVS.items():
+        chat_id = os.getenv(env_name) or os.getenv(LEGACY_HOME_CHANNEL_ENVS.get(platform, ""))
+        if not chat_id:
+            continue
+        base = env_name.removesuffix("_CHANNEL")
+        _add_home_channel(
+            result,
+            seen,
+            platform=platform,
+            chat_id=chat_id,
+            thread_id=os.getenv(f"{base}_CHANNEL_THREAD_ID") or os.getenv(f"{base}_THREAD_ID"),
+            name=os.getenv(f"{base}_CHANNEL_NAME") or os.getenv(f"{base}_NAME") or "Home",
+        )
+
+    _add_home_channels_from_config(result, seen)
+
+    result.sort(key=lambda item: item["platform"])
+    return result
+
+
+def _home_for_platform(platform: str) -> dict[str, str]:
+    home = next((item for item in _configured_home_channels() if item["platform"] == platform), None)
+    if not home:
+        raise HTTPException(status_code=404, detail=f"No home channel configured for platform {platform!r}")
+    return home
+
+
+def _home_subscription_key(item: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(item.get("platform") or ""),
+        str(item.get("chat_id") or ""),
+        str(item.get("thread_id") or ""),
+    )
 
 
 def _normalize_board(slug: Optional[str]) -> str:
@@ -534,10 +688,14 @@ def board_view(
                 or needle in task.id.casefold()
             ]
 
+        links = [
+            {"parent_id": row["parent_id"], "child_id": row["child_id"]}
+            for row in conn.execute("SELECT parent_id, child_id FROM task_links ORDER BY parent_id, child_id").fetchall()
+        ]
         link_counts: dict[str, dict[str, int]] = {}
-        for row in conn.execute("SELECT parent_id, child_id FROM task_links").fetchall():
-            link_counts.setdefault(row["parent_id"], {"parents": 0, "children": 0})["children"] += 1
-            link_counts.setdefault(row["child_id"], {"parents": 0, "children": 0})["parents"] += 1
+        for link in links:
+            link_counts.setdefault(link["parent_id"], {"parents": 0, "children": 0})["children"] += 1
+            link_counts.setdefault(link["child_id"], {"parents": 0, "children": 0})["parents"] += 1
         comment_counts = {
             row["task_id"]: int(row["n"])
             for row in conn.execute("SELECT task_id, COUNT(*) AS n FROM task_comments GROUP BY task_id").fetchall()
@@ -573,6 +731,7 @@ def board_view(
             "columns": columns,
             "column_order": BOARD_COLUMNS + (["archived"] if include_archived else []),
             "tasks": rows,
+            "links": links,
             "stats": kanban_db.board_stats(conn),
             "assignees": kanban_db.known_assignees(conn),
             "tenants": tenants,
@@ -1070,6 +1229,58 @@ def dispatch(board: Optional[str] = Query(None), dry_run: bool = Query(True), ma
             return asdict(result)
         except Exception:
             return {"result": str(result)}
+    finally:
+        conn.close()
+
+
+@router.get("/home-channels")
+def home_channels(task_id: Optional[str] = Query(None), board: Optional[str] = Query(None)) -> dict[str, Any]:
+    homes = _configured_home_channels()
+    subscribed: set[tuple[str, str, str]] = set()
+    if task_id:
+        selected = _resolve_board(board)
+        conn = kanban_db.connect(board=selected)
+        try:
+            subscribed = {_home_subscription_key(sub) for sub in kanban_db.list_notify_subs(conn, task_id)}
+        finally:
+            conn.close()
+    return {"home_channels": [{**home, "subscribed": _home_subscription_key(home) in subscribed} for home in homes]}
+
+
+@router.post("/tasks/{task_id}/home-subscribe/{platform}")
+def subscribe_home_channel(task_id: str, platform: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    home = _home_for_platform(platform.strip().lower())
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        if kanban_db.get_task(conn, task_id) is None:
+            raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        kanban_db.add_notify_sub(
+            conn,
+            task_id=task_id,
+            platform=home["platform"],
+            chat_id=home["chat_id"],
+            thread_id=home["thread_id"] or None,
+        )
+        return {"ok": True, "task_id": task_id, "home_channel": home}
+    finally:
+        conn.close()
+
+
+@router.delete("/tasks/{task_id}/home-subscribe/{platform}")
+def unsubscribe_home_channel(task_id: str, platform: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    home = _home_for_platform(platform.strip().lower())
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        ok = kanban_db.remove_notify_sub(
+            conn,
+            task_id=task_id,
+            platform=home["platform"],
+            chat_id=home["chat_id"],
+            thread_id=home["thread_id"] or None,
+        )
+        return {"ok": ok, "task_id": task_id, "home_channel": home}
     finally:
         conn.close()
 

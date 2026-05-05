@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/design-tokens.css" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/design-tokens.css?v=20260505-7" />
+  <link rel="stylesheet" href="/static/style.css?v=20260505-8" />
 </head>
 <body>
   <div class="app-shell">
@@ -47,7 +47,7 @@
       <section class="toolbar" aria-label="filters">
         <form id="quickCreateForm" class="quick-create">
           <input id="quickTitle" name="title" autocomplete="off" data-i18n-placeholder="quickTitle" placeholder="작업 제목을 입력하고 Enter" />
-          <input id="quickAssignee" name="assignee" autocomplete="off" data-i18n-placeholder="assignee" placeholder="담당자" />
+          <select id="quickAssignee" name="assignee" aria-label="agent profile"></select>
           <select id="quickStatus" name="status">
             <option value="ready">ready</option>
             <option value="todo">todo</option>
@@ -58,6 +58,12 @@
         <div class="filters">
           <input id="searchInput" data-i18n-placeholder="search" placeholder="검색" />
           <select id="assigneeFilter"><option value="" data-i18n="allAssignees">전체 담당자</option></select>
+          <select id="dependencyView" aria-label="dependency view">
+            <option value="focus" data-i18n="dependencyViewFocus">관계선: 선택 중심</option>
+            <option value="all" data-i18n="dependencyViewAll">관계선: 전체</option>
+            <option value="blocked" data-i18n="dependencyViewBlocked">관계선: 막힘</option>
+            <option value="off" data-i18n="dependencyViewOff">관계선: 숨김</option>
+          </select>
           <label class="check"><input id="archivedToggle" type="checkbox" /> <span data-i18n="showArchived">보관함 표시</span></label>
           <button class="button ghost" id="bulkBtn" data-i18n="bulkCreate">일괄 추가</button>
         </div>
@@ -98,6 +104,6 @@ Task two"></textarea>
     </form>
   </dialog>
 
-  <script type="module" src="/static/app.js?v=20260505-2"></script>
+  <script type="module" src="/static/app.js?v=20260505-9"></script>
 </body>
 </html>
