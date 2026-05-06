@@ -8,6 +8,7 @@ export const state = {
   config: null,
   selectedTaskId: null,
   dependencyView: localStorage.getItem('dependencyView') || 'focus',
+  workflowTemplates: [],
   refreshTimer: null
 };
 

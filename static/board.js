@@ -1,19 +1,22 @@
-import { t } from './i18n.js?v=20260505-9';
-import { escapeHtml } from './markdown.js?v=20260505-9';
-import { openTaskDrawer } from './drawer.js?v=20260505-9';
-import { attachDragHandlers } from './dragdrop.js?v=20260505-9';
-import { clearDependencyFocus, focusDependencyTask, renderDependencyOverlay, selectDependencyTask } from './dependency-lines.js?v=20260505-9';
+import { t } from './i18n.js?v=20260506-01';
+import { escapeHtml } from './markdown.js?v=20260506-01';
+import { openTaskDrawer } from './drawer.js?v=20260506-01';
+import { attachDragHandlers } from './dragdrop.js?v=20260506-01';
+import { clearDependencyFocus, focusDependencyTask, renderDependencyOverlay, selectDependencyTask } from './dependency-lines.js?v=20260506-01';
 
 function card(task) {
   const chips = [task.assignee ? `@${task.assignee}` : 'unassigned', task.tenant, task.priority ? `P${task.priority}` : null].filter(Boolean);
   const parents = Number(task.link_counts?.parents || 0);
   const children = Number(task.link_counts?.children || 0);
   const progress = task.progress ? `<span>${task.progress.done}/${task.progress.total}</span>` : '';
+  const workflow = task.workflow_template_id || task.current_step_key
+    ? `<span class="workflow-chip" title="${escapeHtml(task.workflow_template_id || '')}">↔ ${escapeHtml(task.current_step_key || task.workflow_template_id || 'workflow')}</span>`
+    : '';
   return `<article class="task-card ${task.status}" data-task-id="${escapeHtml(task.id)}" data-parent-count="${parents}" data-child-count="${children}" tabindex="0">
     <div class="card-top"><code>${escapeHtml(task.id)}</code><span class="status-dot ${task.status}"></span></div>
     <h3>${escapeHtml(task.title)}</h3>
     ${task.body_preview ? `<p>${escapeHtml(task.body_preview)}</p>` : ''}
-    <div class="chips">${chips.map(x => `<span>${escapeHtml(x)}</span>`).join('')}${progress}</div>
+    <div class="chips">${chips.map(x => `<span>${escapeHtml(x)}</span>`).join('')}${progress}${workflow}</div>
     <div class="card-foot"><span>💬 ${task.comment_count || 0}</span><span class="relation-badge" title="parents ${parents} · children ${children}">↑ ${parents} ↓ ${children}</span>${task.status === 'running' ? '<strong>LIVE</strong>' : ''}</div>
   </article>`;
 }

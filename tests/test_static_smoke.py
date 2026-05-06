@@ -40,9 +40,9 @@ def test_dark_mode_static_contract():
 
     assert 'id="themeToggle"' in index
     assert 'aria-pressed="false"' in index
-    assert 'style.css?v=20260505-10' in index
-    assert 'app.js?v=20260505-10' in index
-    assert './theme.js?v=20260505-10' in app
+    assert 'style.css?v=20260506-01' in index
+    assert 'app.js?v=20260506-01' in index
+    assert './theme.js?v=20260506-01' in app
     assert 'setupThemeToggle' in app
     assert 'updateThemeToggleLabel' in app
     assert 'kanbanTheme' in theme
@@ -130,6 +130,41 @@ def test_dependency_visual_options_and_focus_overlay_contract():
         assert phrase in style
     assert 'dependency-mini-map' in drawer
     assert 'dependencyMiniMap' in drawer
+
+
+def test_workflow_static_contract():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    api = (root / 'static' / 'api.js').read_text(encoding='utf-8')
+    app = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    drawer = (root / 'static' / 'drawer.js').read_text(encoding='utf-8')
+    forms = (root / 'static' / 'forms.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    for phrase in [
+        'id="workflowBtn"',
+        'id="workflowDialog"',
+        'id="workflowForm"',
+        'id="workflowTemplateSelect"',
+        'id="workflowPreview"',
+    ]:
+        assert phrase in index
+
+    for phrase in ['workflowTemplates', 'workflowPreview', 'instantiateWorkflow']:
+        assert phrase in api
+
+    for phrase in ['setupWorkflowDialog', 'data-workflow-preview', 'api.instantiateWorkflow', 'api.workflowPreview']:
+        assert phrase in forms
+
+    assert 'loadWorkflowTemplates' in app
+    assert 'workflow-chip' in board
+    assert 'workflowDetailSection' in drawer
+    for key in ['workflowCreate', 'workflowTemplate', 'workflowPreview', 'workflowInstance', 'workflowSteps']:
+        assert key in i18n
+    for css_class in ['.workflow-step-list', '.workflow-step', '.workflow-chip', '.workflow-meta']:
+        assert css_class in style
 
 
 def test_dependency_lines_render_above_column_backgrounds_below_cards():

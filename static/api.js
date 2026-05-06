@@ -21,6 +21,12 @@ export async function request(path, options = {}) {
   return data;
 }
 
+function boardQuery(board, extra = {}) {
+  const clean = { ...extra };
+  if (board) clean.board = board;
+  return new URLSearchParams(clean).toString();
+}
+
 export const api = {
   health: () => request('/health'),
   status: () => request('/api/service/status'),
@@ -28,6 +34,10 @@ export const api = {
   boards: () => request('/api/boards'),
   createBoard: payload => request('/api/boards', { method: 'POST', body: payload }),
   switchBoard: slug => request(`/api/boards/${encodeURIComponent(slug)}/switch`, { method: 'POST' }),
+  workflowTemplates: () => request('/api/workflows/templates'),
+  workflowPreview: (board, payload) => request(`/api/workflows/preview?${boardQuery(board)}`, { method: 'POST', body: payload }),
+  instantiateWorkflow: (board, payload) => request(`/api/workflows/instantiate?${boardQuery(board)}`, { method: 'POST', body: payload }),
+  workflowInstance: (board, instanceId) => request(`/api/workflows/instances/${encodeURIComponent(instanceId)}?${boardQuery(board)}`),
   board: params => {
     const clean = {};
     for (const [key, value] of Object.entries(params || {})) {

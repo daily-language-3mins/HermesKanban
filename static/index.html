@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/design-tokens.css?v=20260505-10" />
-  <link rel="stylesheet" href="/static/style.css?v=20260505-10" />
+  <link rel="stylesheet" href="/static/design-tokens.css?v=20260506-01" />
+  <link rel="stylesheet" href="/static/style.css?v=20260506-01" />
 </head>
 <body>
   <div class="app-shell">
@@ -66,6 +66,7 @@
             <option value="off" data-i18n="dependencyViewOff">관계선: 숨김</option>
           </select>
           <label class="check"><input id="archivedToggle" type="checkbox" /> <span data-i18n="showArchived">보관함 표시</span></label>
+          <button class="button ghost" id="workflowBtn" type="button" data-i18n="workflowCreate">Workflow 생성</button>
           <button class="button ghost" id="bulkBtn" data-i18n="bulkCreate">일괄 추가</button>
         </div>
       </section>
@@ -105,6 +106,22 @@ Task two"></textarea>
     </form>
   </dialog>
 
-  <script type="module" src="/static/app.js?v=20260505-10"></script>
+  <dialog id="workflowDialog" class="modal workflow-modal">
+    <form id="workflowForm" method="dialog">
+      <h3 data-i18n="workflowCreate">Workflow 생성</h3>
+      <label class="dialog-label"><span data-i18n="workflowTemplate">Workflow 템플릿</span><select id="workflowTemplateSelect" name="template_id" required></select></label>
+      <label class="dialog-label"><span data-i18n="title">제목</span><input name="title" data-i18n-placeholder="quickTitle" placeholder="작업 제목" required /></label>
+      <label class="dialog-label"><span data-i18n="body">본문</span><textarea name="body" rows="5" data-i18n-placeholder="description" placeholder="설명"></textarea></label>
+      <label class="dialog-label"><span data-i18n="workflowInstance">Instance ID</span><input name="instance_id" placeholder="선택 사항: wf_project_001" /></label>
+      <div id="workflowPreview" class="workflow-preview" aria-live="polite"></div>
+      <div class="modal-actions">
+        <button class="button ghost" type="button" data-workflow-cancel data-i18n="cancel">취소</button>
+        <button class="button ghost" type="button" data-workflow-preview data-i18n="workflowPreview">미리보기</button>
+        <button class="button primary" value="default" data-i18n="create">추가</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/static/app.js?v=20260506-01"></script>
 </body>
 </html>

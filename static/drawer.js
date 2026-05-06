@@ -1,8 +1,8 @@
-import { api } from './api.js?v=20260505-9';
-import { t, applyI18n } from './i18n.js?v=20260505-9';
-import { renderMarkdown, escapeHtml } from './markdown.js?v=20260505-9';
-import { renderMonitor } from './monitor.js?v=20260505-9';
-import { state, toast } from './state.js?v=20260505-9';
+import { api } from './api.js?v=20260506-01';
+import { t, applyI18n } from './i18n.js?v=20260506-01';
+import { renderMarkdown, escapeHtml } from './markdown.js?v=20260506-01';
+import { renderMonitor } from './monitor.js?v=20260506-01';
+import { state, toast } from './state.js?v=20260506-01';
 
 export function closeDrawer() {
   const drawer = document.getElementById('drawer');
@@ -118,6 +118,26 @@ function homeChannelButtons(homeChannels) {
   }).join('')}</div>`;
 }
 
+function workflowInstanceId(task) {
+  const key = task.idempotency_key || '';
+  if (!key.startsWith('workflow:')) return '';
+  return key.split(':')[1] || '';
+}
+
+function workflowDetailSection(task) {
+  if (!task.workflow_template_id && !task.current_step_key && !task.idempotency_key) return '';
+  const instance = workflowInstanceId(task);
+  return `<section class="drawer-section workflow-detail">
+    <div class="section-title"><h3>${t('workflow')}</h3></div>
+    <div class="detail-grid workflow-meta">
+      <span><strong>${t('workflowTemplate')}</strong>${escapeHtml(task.workflow_template_id || '—')}</span>
+      <span><strong>${t('workflowStep')}</strong>${escapeHtml(task.current_step_key || '—')}</span>
+      ${instance ? `<span><strong>${t('workflowInstance')}</strong>${escapeHtml(instance)}</span>` : ''}
+      ${task.idempotency_key ? `<span><strong>Idempotency</strong><code>${escapeHtml(task.idempotency_key)}</code></span>` : ''}
+    </div>
+  </section>`;
+}
+
 async function renderWorkerLog(taskId, root) {
   const pre = root.querySelector('#workerLogContent');
   if (!pre) return;
@@ -169,6 +189,8 @@ export async function openTaskDrawer(taskId) {
       <span><strong>${t('created')}</strong>${formatTime(task.created_at)}</span>
       ${task.tenant ? `<span><strong>Tenant</strong>${escapeHtml(task.tenant)}</span>` : ''}
     </div>
+
+    ${workflowDetailSection(task)}
 
     <div class="drawer-actions">
       <button data-action="triage" data-status="triage" class="button ghost">→ triage</button>

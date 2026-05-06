@@ -21,6 +21,7 @@ from .hermes_imports import kanban_db
 from .serializers import comment_dict, event_dict, links_for, run_dict, task_dict
 from .service_status import service_status
 from .ui_registry import registry
+from . import workflows
 
 router = APIRouter(prefix="/api")
 
@@ -73,6 +74,21 @@ class CreateTaskBody(BaseModel):
     max_runtime_seconds: Optional[int] = None
     skills: Optional[list[str]] = None
     status: Optional[str] = None
+    workflow_template_id: Optional[str] = None
+    current_step_key: Optional[str] = None
+
+
+class WorkflowRequestBody(BaseModel):
+    template_id: str
+    title: str
+    body: Optional[str] = None
+    instance_id: Optional[str] = None
+    assignee_overrides: dict[str, str] = Field(default_factory=dict)
+    created_by: Optional[str] = "kanban-webui"
+    workspace_kind: str = "scratch"
+    workspace_path: Optional[str] = None
+    tenant: Optional[str] = None
+    priority_offset: int = 0
 
 
 class BulkCreateBody(BaseModel):
@@ -479,6 +495,28 @@ def _normalize_writeable_task_updates(payload: UpdateTaskBody) -> dict[str, Any]
     return updates
 
 
+def _apply_create_workflow_fields(
+    conn,
+    task_id: str,
+    *,
+    workflow_template_id: Optional[str],
+    current_step_key: Optional[str],
+) -> None:
+    if workflow_template_id is None and current_step_key is None:
+        return
+    with kanban_db.write_txn(conn):
+        conn.execute(
+            "UPDATE tasks SET workflow_template_id = ?, current_step_key = ? WHERE id = ?",
+            (workflow_template_id, current_step_key, task_id),
+        )
+        _insert_event(
+            conn,
+            task_id,
+            "workflow_attached",
+            {"template_id": workflow_template_id, "step_key": current_step_key},
+        )
+
+
 def _apply_task_update(conn, task_id: str, payload: UpdateTaskBody) -> dict[str, Any]:
     task = kanban_db.get_task(conn, task_id)
     if task is None:
@@ -577,6 +615,92 @@ def init(board: Optional[str] = Query(None)) -> dict[str, Any]:
 @router.get("/ui/registry")
 def ui_registry() -> dict[str, Any]:
     return registry()
+
+
+@router.get("/workflows/templates")
+def workflow_templates() -> dict[str, Any]:
+    return {"templates": workflows.list_templates(), "errors": []}
+
+
+@router.get("/workflows/templates/{template_id}")
+def workflow_template(template_id: str) -> dict[str, Any]:
+    try:
+        template = workflows.get_template(template_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow template {template_id!r} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    template["step_count"] = len(template.get("steps") or [])
+    return {"template": template}
+
+
+@router.post("/workflows/preview")
+def workflow_preview(payload: WorkflowRequestBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    try:
+        preview = workflows.preview_workflow(
+            payload.template_id,
+            title=payload.title,
+            body=payload.body,
+            assignee_overrides=payload.assignee_overrides,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow template {payload.template_id!r} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    preview["board"] = selected
+    return preview
+
+
+@router.post("/workflows/instantiate")
+def workflow_instantiate(payload: WorkflowRequestBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        result = workflows.instantiate_workflow(
+            conn,
+            payload.template_id,
+            title=payload.title,
+            body=payload.body,
+            instance_id=payload.instance_id,
+            assignee_overrides=payload.assignee_overrides,
+            created_by=payload.created_by,
+            workspace_kind=payload.workspace_kind,
+            workspace_path=payload.workspace_path,
+            tenant=payload.tenant,
+            priority_offset=payload.priority_offset,
+        )
+        result["board"] = selected
+        return result
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow template {payload.template_id!r} not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        conn.close()
+
+
+@router.get("/workflows/instances/{instance_id}")
+def workflow_instance(instance_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        try:
+            instance = workflows.workflow_instance(conn, instance_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if instance is None:
+            raise HTTPException(status_code=404, detail=f"workflow instance {instance_id!r} not found")
+        return {
+            "board": selected,
+            "instance_id": instance["instance_id"],
+            "template_id": instance["template_id"],
+            "tasks": [task_dict(task) for task in instance["tasks"]],
+            "links": instance["links"],
+            "progress": instance["progress"],
+        }
+    finally:
+        conn.close()
 
 
 @router.get("/boards")
@@ -775,6 +899,12 @@ def create_task(payload: CreateTaskBody, board: Optional[str] = Query(None)) -> 
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if payload.status:
             _set_status_direct(conn, task_id, payload.status)
+        _apply_create_workflow_fields(
+            conn,
+            task_id,
+            workflow_template_id=payload.workflow_template_id,
+            current_step_key=payload.current_step_key,
+        )
         return _task_detail(conn, task_id, board=selected)
     finally:
         conn.close()

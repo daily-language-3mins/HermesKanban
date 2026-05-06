@@ -132,6 +132,18 @@ textarea { width: 100%; resize: vertical; }
 .modal form { display: grid; gap: 12px; }
 .modal::backdrop { background: var(--modal-backdrop-bg); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog-label { display: grid; gap: 6px; color: var(--muted); font-weight: 700; }
+.dialog-label input, .dialog-label select, .dialog-label textarea { width: 100%; }
+.workflow-modal { width: min(760px, 94vw); }
+.workflow-preview { border: 1px solid var(--hairline); border-radius: 18px; padding: 12px; background: var(--panel-bg); max-height: 320px; overflow: auto; }
+.workflow-step-list { list-style: none; display: grid; gap: 8px; padding: 0; margin: 0; }
+.workflow-step { display: grid; gap: 6px; border: 1px solid var(--hairline); border-radius: 16px; padding: 10px; background: var(--detail-bg); }
+.workflow-step > div:first-child { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.workflow-step code { color: var(--link); font-family: var(--font-mono); font-size: 12px; }
+.workflow-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+.workflow-meta span { min-width: 0; }
+.workflow-chip { border-color: rgba(13,116,206,.32) !important; color: var(--link) !important; font-weight: 800; }
+.workflow-detail .workflow-meta { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); color: var(--ink); font-size: 14px; }
 @media (max-width: 900px) {
   .topbar, .hero-card, .toolbar { align-items: stretch; flex-direction: column; }
   .kpi-row { grid-template-columns: repeat(3, 1fr); }
