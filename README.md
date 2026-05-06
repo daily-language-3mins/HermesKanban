@@ -7,18 +7,62 @@ KanbanWebUI is intentionally a thin Web/API layer over Hermes' existing
 dispatcher, or worker protocol. The Hermes CLI and this WebUI read/write the
 same SQLite board data.
 
+## Screenshots
+
+![Kanban board overview](docs/assets/screenshots/kanban-board-overview.png)
+
+The main board shows the same Hermes Kanban tasks as the CLI, with responsive
+columns, filters, quick creation, drag-and-drop status changes, dependency
+visibility, and dark-mode support.
+
+![AI Workflow Designer](docs/assets/screenshots/ai-workflow-designer.png)
+
+The AI Workflow Designer turns a prompt and optional text attachments into an
+editable workflow draft before any real Kanban tasks are created.
+
 ## Features
 
-- Readable Trello-style board with columns for `triage`, `todo`, `ready`,
+This project separates what already belongs to Hermes Agent from what the WebUI
+adds on top. The WebUI is a companion interface, not a replacement task runner.
+
+### Hermes Agent 기본 기능
+
+Hermes Agent already provides the core Kanban execution model:
+
+- Shared SQLite Kanban schema and database access through
+  `hermes_cli.kanban_db`.
+- CLI task lifecycle operations such as init, board management, create/list/show,
+  assign, claim, heartbeat, comment, complete, block, unblock, archive, stats,
+  logs, context, dispatch, and garbage collection.
+- Task states used by the worker flow: `triage`, `todo`, `ready`, `running`,
+  `blocked`, `done`, and archived tasks.
+- Task metadata for comments, events, runs, logs, and parent-child dependencies
+  stored as normal Hermes Kanban records.
+- Profile-based dispatch: a `ready` task with an assignee/profile can be claimed
+  and executed by Hermes workers using the built-in `kanban-worker` skill.
+- Hermes-wide concerns such as model/provider configuration, skills, toolsets,
+  gateway platforms, memory, credentials, and profile isolation.
+
+### KanbanWebUI 추가 기능
+
+KanbanWebUI adds a browser-first operations layer over that existing Hermes
+Kanban data:
+
+- Responsive Trello-style board columns for `triage`, `todo`, `ready`,
   `running`, `blocked`, and `done`.
-- Quick task creation, bulk task creation, board CRUD/switching, filters, and
-  drag-and-drop status changes.
-- Task detail drawer with comments, events, runs, markdown rendering, and a
-  Live Run Monitor for running tasks.
+- Quick task creation, bulk task creation, board CRUD/switching, filters, search,
+  archive visibility, and drag-and-drop status changes.
+- Task detail drawer with editable metadata/body, comments, events, runs,
+  markdown rendering, dependency controls, home-channel notification toggles,
+  and a Live Run Monitor for running tasks.
+- Dependency visualization on the board and task drawer so parent/child task
+  relationships are visible without leaving the browser.
 - Prompt-driven AI Workflow Designer: enter a goal plus optional text files,
-  review/revise the proposed task DAG, then apply it as Kanban tasks with
+  review/revise the proposed task DAG, then apply it as normal Kanban tasks with
   parent-child dependencies.
-- Korean UI by default with an English toggle.
+- Workflow draft storage, board-scoped draft APIs, immutable applied drafts, and
+  backend guards that prevent non-applyable AI proposals from being applied.
+- Korean UI by default with an English toggle, plus light/dark themes.
 - Optional token auth for `/api/*` endpoints.
 - Loopback-first runtime with Host-header and cross-origin mutation checks for
   safer localhost/Tailscale usage.

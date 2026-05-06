@@ -112,6 +112,24 @@ def test_readme_documents_one_command_install_and_management_flow():
         assert phrase in readme
 
 
+def test_readme_separates_hermes_core_and_webui_features_with_screenshots():
+    readme = read("README.md")
+
+    for phrase in [
+        "Hermes Agent 기본 기능",
+        "KanbanWebUI 추가 기능",
+        "docs/assets/screenshots/kanban-board-overview.png",
+        "docs/assets/screenshots/ai-workflow-designer.png",
+    ]:
+        assert phrase in readme
+
+    for rel in [
+        "docs/assets/screenshots/kanban-board-overview.png",
+        "docs/assets/screenshots/ai-workflow-designer.png",
+    ]:
+        assert (ROOT / rel).is_file(), rel
+
+
 def test_scripts_have_valid_bash_syntax():
     for rel in ["scripts/install.sh", "scripts/hermes-kanban"]:
         subprocess.run(["bash", "-n", str(ROOT / rel)], cwd=ROOT, check=True)
