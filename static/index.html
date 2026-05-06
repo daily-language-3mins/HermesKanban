@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/design-tokens.css" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/design-tokens.css?v=20260506-02" />
+  <link rel="stylesheet" href="/static/style.css?v=20260506-02" />
 </head>
 <body>
   <div class="app-shell">
@@ -24,6 +24,7 @@
         <select id="boardSelect" aria-label="board"></select>
         <button class="button ghost" id="newBoardBtn" data-i18n="newBoard">보드 추가</button>
         <button class="button ghost" id="refreshBtn" data-i18n="refresh">새로고침</button>
+        <button class="button ghost theme-toggle" id="themeToggle" type="button" aria-pressed="false">🌙 다크</button>
         <button class="button" id="langToggle">EN</button>
       </div>
     </header>
@@ -47,7 +48,7 @@
       <section class="toolbar" aria-label="filters">
         <form id="quickCreateForm" class="quick-create">
           <input id="quickTitle" name="title" autocomplete="off" data-i18n-placeholder="quickTitle" placeholder="작업 제목을 입력하고 Enter" />
-          <input id="quickAssignee" name="assignee" autocomplete="off" data-i18n-placeholder="assignee" placeholder="담당자" />
+          <select id="quickAssignee" name="assignee" aria-label="agent profile"></select>
           <select id="quickStatus" name="status">
             <option value="ready">ready</option>
             <option value="todo">todo</option>
@@ -58,7 +59,14 @@
         <div class="filters">
           <input id="searchInput" data-i18n-placeholder="search" placeholder="검색" />
           <select id="assigneeFilter"><option value="" data-i18n="allAssignees">전체 담당자</option></select>
+          <select id="dependencyView" aria-label="dependency view">
+            <option value="focus" data-i18n="dependencyViewFocus">관계선: 선택 중심</option>
+            <option value="all" data-i18n="dependencyViewAll">관계선: 전체</option>
+            <option value="blocked" data-i18n="dependencyViewBlocked">관계선: 막힘</option>
+            <option value="off" data-i18n="dependencyViewOff">관계선: 숨김</option>
+          </select>
           <label class="check"><input id="archivedToggle" type="checkbox" /> <span data-i18n="showArchived">보관함 표시</span></label>
+          <button class="button ghost" id="workflowBtn" type="button" data-i18n="workflowCreate">Workflow 생성</button>
           <button class="button ghost" id="bulkBtn" data-i18n="bulkCreate">일괄 추가</button>
         </div>
       </section>
@@ -98,6 +106,29 @@ Task two"></textarea>
     </form>
   </dialog>
 
-  <script type="module" src="/static/app.js?v=20260505-2"></script>
+  <dialog id="workflowDialog" class="modal workflow-modal">
+    <form id="workflowForm" method="dialog">
+      <h3 data-i18n="workflowCreate">AI Workflow 생성</h3>
+      <p class="muted" data-i18n="workflowDesignerHint">프롬프트와 첨부파일로 작업 DAG를 설계한 뒤 승인 시 실제 Kanban task로 적용합니다.</p>
+      <label class="dialog-label"><span data-i18n="workflowPrompt">Workflow 프롬프트</span><textarea id="workflowPrompt" name="prompt" rows="6" data-i18n-placeholder="workflowPromptPlaceholder" placeholder="만들고 싶은 workflow를 설명하세요" required></textarea></label>
+      <div class="workflow-field-grid">
+        <label class="dialog-label"><span data-i18n="workflowPlannerProfile">Planner 프로필</span><input id="workflowPlannerProfile" name="planner_profile" placeholder="자동 선택" /></label>
+        <label class="dialog-label"><span data-i18n="workflowInstance">Instance ID</span><input name="instance_id" placeholder="선택 사항: wf_project_001" /></label>
+      </div>
+      <label class="dialog-label"><span data-i18n="workflowAttachments">첨부파일</span><input id="workflowAttachments" name="attachments" type="file" multiple /></label>
+      <div class="workflow-draft-actions">
+        <button class="button ghost" type="button" data-workflow-plan data-i18n="workflowPlan">설계</button>
+      </div>
+      <div id="workflowDraftPreview" class="workflow-preview" aria-live="polite"></div>
+      <label class="dialog-label"><span data-i18n="workflowRevise">수정 프롬프트</span><textarea id="workflowRevisionPrompt" name="revision_prompt" rows="3" data-i18n-placeholder="workflowRevisionPlaceholder" placeholder="변경할 점을 입력하세요"></textarea></label>
+      <div class="modal-actions">
+        <button class="button ghost" type="button" data-workflow-cancel data-i18n="cancel">취소</button>
+        <button class="button ghost" type="button" data-workflow-revise data-i18n="workflowRevise" disabled>수정</button>
+        <button class="button primary" type="button" data-workflow-apply data-i18n="workflowApply" disabled>적용</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/static/app.js?v=20260506-02"></script>
 </body>
 </html>

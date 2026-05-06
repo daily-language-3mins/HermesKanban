@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from typing import Any, Iterable, Optional
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -19,6 +21,8 @@ from .hermes_imports import kanban_db
 from .serializers import comment_dict, event_dict, links_for, run_dict, task_dict
 from .service_status import service_status
 from .ui_registry import registry
+from .config import get_settings
+from . import workflow_drafts, workflow_planner, workflows
 
 router = APIRouter(prefix="/api")
 
@@ -71,6 +75,47 @@ class CreateTaskBody(BaseModel):
     max_runtime_seconds: Optional[int] = None
     skills: Optional[list[str]] = None
     status: Optional[str] = None
+    workflow_template_id: Optional[str] = None
+    current_step_key: Optional[str] = None
+
+
+class WorkflowRequestBody(BaseModel):
+    template_id: str
+    title: str
+    body: Optional[str] = None
+    instance_id: Optional[str] = None
+    assignee_overrides: dict[str, str] = Field(default_factory=dict)
+    created_by: Optional[str] = "kanban-webui"
+    workspace_kind: str = "scratch"
+    workspace_path: Optional[str] = None
+    tenant: Optional[str] = None
+    priority_offset: int = 0
+
+
+class WorkflowAttachmentBody(BaseModel):
+    filename: str
+    content: str
+    content_type: Optional[str] = "text/plain"
+
+
+class WorkflowDraftCreateBody(BaseModel):
+    prompt: str
+    planner_profile: Optional[str] = None
+    max_steps: Optional[int] = None
+    attachments: list[WorkflowAttachmentBody] = Field(default_factory=list)
+
+
+class WorkflowDraftReviseBody(BaseModel):
+    revision_prompt: str
+
+
+class WorkflowDraftInstantiateBody(BaseModel):
+    instance_id: Optional[str] = None
+    created_by: Optional[str] = "kanban-webui"
+    workspace_kind: str = "scratch"
+    workspace_path: Optional[str] = None
+    tenant: Optional[str] = None
+    priority_offset: int = 0
 
 
 class BulkCreateBody(BaseModel):
@@ -156,6 +201,158 @@ class NotifyBody(BaseModel):
     user_id: Optional[str] = None
 
 
+HOME_CHANNEL_ENVS = {
+    "telegram": "TELEGRAM_HOME_CHANNEL",
+    "discord": "DISCORD_HOME_CHANNEL",
+    "slack": "SLACK_HOME_CHANNEL",
+    "signal": "SIGNAL_HOME_CHANNEL",
+    "mattermost": "MATTERMOST_HOME_CHANNEL",
+    "sms": "SMS_HOME_CHANNEL",
+    "dingtalk": "DINGTALK_HOME_CHANNEL",
+    "feishu": "FEISHU_HOME_CHANNEL",
+    "wecom": "WECOM_HOME_CHANNEL",
+    "weixin": "WEIXIN_HOME_CHANNEL",
+    "bluebubbles": "BLUEBUBBLES_HOME_CHANNEL",
+    "qqbot": "QQBOT_HOME_CHANNEL",
+    "yuanbao": "YUANBAO_HOME_CHANNEL",
+}
+LEGACY_HOME_CHANNEL_ENVS = {"qqbot": "QQ_HOME_CHANNEL"}
+
+
+def _add_home_channel(result: list[dict[str, str]], seen: set[str], *, platform: str, chat_id: Any, name: Any = None, thread_id: Any = None) -> None:
+    platform_name = str(platform or "").strip().lower()
+    chat_text = str(chat_id or "").strip()
+    if not platform_name or not chat_text or platform_name in seen:
+        return
+    result.append(
+        {
+            "platform": platform_name,
+            "chat_id": chat_text,
+            "thread_id": str(thread_id or ""),
+            "name": str(name or "Home"),
+        }
+    )
+    seen.add(platform_name)
+
+
+def _yaml_scalar(value: str) -> str:
+    text = value.split("#", 1)[0].strip()
+    if (text.startswith("'") and text.endswith("'")) or (text.startswith('"') and text.endswith('"')):
+        return text[1:-1]
+    return text
+
+
+def _config_paths() -> list[Path]:
+    paths: list[Path] = []
+    if os.getenv("HERMES_CONFIG"):
+        paths.append(Path(os.environ["HERMES_CONFIG"]).expanduser())
+    if os.getenv("HERMES_HOME"):
+        paths.append(Path(os.environ["HERMES_HOME"]).expanduser() / "config.yaml")
+    if os.getenv("USER"):
+        paths.append(Path("/home") / os.environ["USER"] / ".hermes" / "config.yaml")
+    paths.append(Path.home() / ".hermes" / "config.yaml")
+    unique: list[Path] = []
+    for path in paths:
+        if path not in unique:
+            unique.append(path)
+    return unique
+
+
+def _add_home_channels_from_config(result: list[dict[str, str]], seen: set[str]) -> None:
+    """Small YAML fallback for WebUI venvs without PyYAML/gateway deps."""
+    for path in _config_paths():
+        if not path.is_file():
+            continue
+        current_platform: Optional[str] = None
+        current_indent = 0
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+                continue
+            indent = len(raw_line) - len(raw_line.lstrip())
+            line = raw_line.strip()
+            if indent == 0 and line.endswith(":"):
+                candidate = line[:-1].strip().lower()
+                current_platform = candidate if candidate in HOME_CHANNEL_ENVS else None
+                current_indent = indent
+                continue
+            if indent == 0:
+                current_platform = None
+                for platform, env_name in HOME_CHANNEL_ENVS.items():
+                    if line.startswith(f"{env_name}:"):
+                        _add_home_channel(result, seen, platform=platform, chat_id=_yaml_scalar(line.split(":", 1)[1]))
+                continue
+            if current_platform and indent > current_indent and line.startswith("home_channel:"):
+                _add_home_channel(result, seen, platform=current_platform, chat_id=_yaml_scalar(line.split(":", 1)[1]))
+        break
+
+
+def _configured_home_channels() -> list[dict[str, str]]:
+    """Return gateway home channels available for dashboard-style toggles.
+
+    Prefer Hermes' GatewayConfig when importable, then documented env vars, then
+    a tiny config.yaml fallback for this standalone WebUI's lean virtualenv.
+    """
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    try:
+        from gateway.config import load_gateway_config
+
+        gw_cfg = load_gateway_config()
+        for platform, pcfg in (getattr(gw_cfg, "platforms", {}) or {}).items():
+            home = getattr(pcfg, "home_channel", None)
+            if not home:
+                continue
+            platform_name = getattr(platform, "value", str(platform))
+            _add_home_channel(
+                result,
+                seen,
+                platform=platform_name,
+                chat_id=getattr(home, "chat_id", ""),
+                thread_id=getattr(home, "thread_id", None),
+                name=getattr(home, "name", None),
+            )
+    except Exception:
+        pass
+
+    for platform, env_name in HOME_CHANNEL_ENVS.items():
+        chat_id = os.getenv(env_name) or os.getenv(LEGACY_HOME_CHANNEL_ENVS.get(platform, ""))
+        if not chat_id:
+            continue
+        base = env_name.removesuffix("_CHANNEL")
+        _add_home_channel(
+            result,
+            seen,
+            platform=platform,
+            chat_id=chat_id,
+            thread_id=os.getenv(f"{base}_CHANNEL_THREAD_ID") or os.getenv(f"{base}_THREAD_ID"),
+            name=os.getenv(f"{base}_CHANNEL_NAME") or os.getenv(f"{base}_NAME") or "Home",
+        )
+
+    _add_home_channels_from_config(result, seen)
+
+    result.sort(key=lambda item: item["platform"])
+    return result
+
+
+def _home_for_platform(platform: str) -> dict[str, str]:
+    home = next((item for item in _configured_home_channels() if item["platform"] == platform), None)
+    if not home:
+        raise HTTPException(status_code=404, detail=f"No home channel configured for platform {platform!r}")
+    return home
+
+
+def _home_subscription_key(item: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(item.get("platform") or ""),
+        str(item.get("chat_id") or ""),
+        str(item.get("thread_id") or ""),
+    )
+
+
 def _normalize_board(slug: Optional[str]) -> str:
     try:
         normed = kanban_db._normalize_board_slug(slug) if slug else kanban_db.get_current_board()
@@ -169,6 +366,36 @@ def _resolve_board(slug: Optional[str]) -> str:
     if not kanban_db.board_exists(board):
         raise HTTPException(status_code=404, detail=f"board {board!r} does not exist")
     return board
+
+
+def _clamp_max_steps(value: Optional[int], default: int, maximum: int) -> int:
+    if value is None:
+        return max(1, min(int(default), int(maximum)))
+    return max(1, min(int(value), int(maximum)))
+
+
+def _raise_proposal_errors(validation: dict[str, Any]) -> None:
+    errors = validation.get("errors") or []
+    if errors:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+
+
+def _load_workflow_draft_for_board(settings: Settings, draft_id: str, board: str) -> dict[str, Any]:
+    try:
+        draft = workflow_drafts.load_draft(settings, draft_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if draft.get("board") != board:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found")
+    return draft
+
+
+def _raise_not_applyable(draft: dict[str, Any]) -> None:
+    proposal = draft.get("proposal") or {}
+    if proposal.get("applyable") is False:
+        raise HTTPException(status_code=409, detail="workflow draft is not applyable; revise it before applying")
 
 
 def _conn(board: Optional[str] = None):
@@ -325,6 +552,28 @@ def _normalize_writeable_task_updates(payload: UpdateTaskBody) -> dict[str, Any]
     return updates
 
 
+def _apply_create_workflow_fields(
+    conn,
+    task_id: str,
+    *,
+    workflow_template_id: Optional[str],
+    current_step_key: Optional[str],
+) -> None:
+    if workflow_template_id is None and current_step_key is None:
+        return
+    with kanban_db.write_txn(conn):
+        conn.execute(
+            "UPDATE tasks SET workflow_template_id = ?, current_step_key = ? WHERE id = ?",
+            (workflow_template_id, current_step_key, task_id),
+        )
+        _insert_event(
+            conn,
+            task_id,
+            "workflow_attached",
+            {"template_id": workflow_template_id, "step_key": current_step_key},
+        )
+
+
 def _apply_task_update(conn, task_id: str, payload: UpdateTaskBody) -> dict[str, Any]:
     task = kanban_db.get_task(conn, task_id)
     if task is None:
@@ -423,6 +672,221 @@ def init(board: Optional[str] = Query(None)) -> dict[str, Any]:
 @router.get("/ui/registry")
 def ui_registry() -> dict[str, Any]:
     return registry()
+
+
+def _deprecated_template_workflows() -> None:
+    raise HTTPException(
+        status_code=410,
+        detail="Template workflows are deprecated. Use /api/workflows/drafts instead.",
+    )
+
+
+@router.get("/workflows/templates")
+def workflow_templates() -> dict[str, Any]:
+    _deprecated_template_workflows()
+
+
+@router.get("/workflows/templates/{template_id}")
+def workflow_template(template_id: str) -> dict[str, Any]:
+    _deprecated_template_workflows()
+
+
+@router.post("/workflows/preview")
+def workflow_preview(payload: WorkflowRequestBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    _deprecated_template_workflows()
+
+
+@router.post("/workflows/instantiate")
+def workflow_instantiate(payload: WorkflowRequestBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    _deprecated_template_workflows()
+
+
+@router.post("/workflows/drafts")
+def create_workflow_draft(payload: WorkflowDraftCreateBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=422, detail="prompt is required")
+    settings = get_settings()
+    max_steps = _clamp_max_steps(payload.max_steps, settings.workflow_default_max_steps, settings.workflow_max_steps)
+    draft_id = workflow_drafts.new_draft_id()
+    draft_path = workflow_drafts.draft_dir(settings, draft_id)
+    conn = kanban_db.connect(board=selected)
+    try:
+        profiles = workflow_drafts.available_profiles(conn)
+        planner_profile = workflow_drafts.select_planner_profile(
+            payload.planner_profile,
+            settings=settings,
+            profiles=profiles,
+        )
+        attachments = workflow_drafts.normalize_attachment_inputs(
+            draft_path,
+            [item.model_dump() for item in payload.attachments],
+            max_files=settings.workflow_attachment_max_files,
+            max_bytes=settings.workflow_attachment_max_bytes,
+        )
+        proposal = workflow_planner.generate_workflow_proposal(
+            prompt=prompt,
+            planner_profile=planner_profile,
+            max_steps=max_steps,
+            attachments=attachments,
+            profiles=profiles,
+            settings=settings,
+        )
+        normalized, validation = workflow_drafts.normalize_proposal(
+            proposal,
+            available_profile_names=workflow_drafts.profile_names(profiles),
+            max_steps=max_steps,
+        )
+        _raise_proposal_errors(validation)
+        draft = workflow_drafts.create_draft_record(
+            settings=settings,
+            board=selected,
+            prompt=prompt,
+            planner_profile=planner_profile,
+            max_steps=max_steps,
+            attachments=attachments,
+            proposal=normalized,
+            validation=validation,
+            profiles=profiles,
+            draft_id=draft_id,
+        )
+        return {"ok": True, "board": selected, "draft": draft, "profiles": profiles}
+    except workflow_planner.PlannerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        conn.close()
+
+
+@router.get("/workflows/drafts/{draft_id}")
+def get_workflow_draft(draft_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    settings = get_settings()
+    draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+    return {"ok": True, "board": selected, "draft": draft, "profiles": draft.get("profiles") or []}
+
+
+@router.post("/workflows/drafts/{draft_id}/revise")
+def revise_workflow_draft(
+    draft_id: str,
+    payload: WorkflowDraftReviseBody,
+    board: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    revision_prompt = payload.revision_prompt.strip()
+    if not revision_prompt:
+        raise HTTPException(status_code=422, detail="revision_prompt is required")
+    settings = get_settings()
+    try:
+        draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+        if draft.get("status") == "applied":
+            raise HTTPException(status_code=409, detail="applied workflow drafts cannot be revised")
+        profiles = draft.get("profiles") or []
+        proposal = workflow_planner.generate_workflow_proposal(
+            prompt=draft.get("prompt") or "",
+            planner_profile=draft.get("planner_profile") or "default",
+            max_steps=int(draft.get("max_steps") or settings.workflow_default_max_steps),
+            attachments=draft.get("attachments") or [],
+            profiles=profiles,
+            settings=settings,
+            previous_proposal=draft.get("proposal"),
+            revision_prompt=revision_prompt,
+        )
+        normalized, validation = workflow_drafts.normalize_proposal(
+            proposal,
+            available_profile_names=workflow_drafts.profile_names(profiles),
+            max_steps=int(draft.get("max_steps") or settings.workflow_max_steps),
+        )
+        _raise_proposal_errors(validation)
+        draft = workflow_drafts.append_revision(
+            settings,
+            draft,
+            revision_prompt=revision_prompt,
+            proposal=normalized,
+            validation=validation,
+        )
+        return {"ok": True, "board": selected, "draft": draft, "profiles": profiles}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except HTTPException:
+        raise
+    except workflow_planner.PlannerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/workflows/drafts/{draft_id}/instantiate")
+def instantiate_workflow_draft(
+    draft_id: str,
+    payload: WorkflowDraftInstantiateBody,
+    board: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    settings = get_settings()
+    conn = kanban_db.connect(board=selected)
+    try:
+        draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+        if draft.get("status") == "applied":
+            raise HTTPException(status_code=409, detail="workflow draft has already been applied")
+        validation = draft.get("validation") or {}
+        _raise_proposal_errors(validation)
+        _raise_not_applyable(draft)
+        result = workflows.instantiate_steps_workflow(
+            conn,
+            source_id=workflow_drafts.PROMPT_WORKFLOW_SOURCE_ID,
+            source_name=workflow_drafts.PROMPT_WORKFLOW_SOURCE_NAME,
+            steps=workflow_drafts.steps_for_instantiation(draft),
+            instance_id=payload.instance_id,
+            created_by=payload.created_by,
+            workspace_kind=payload.workspace_kind,
+            workspace_path=payload.workspace_path,
+            tenant=payload.tenant,
+            priority_offset=payload.priority_offset,
+        )
+        result["board"] = selected
+        workflow_drafts.mark_applied(
+            settings,
+            draft,
+            instance_id=result["instance_id"],
+            result=result,
+        )
+        return result
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        conn.close()
+
+
+@router.get("/workflows/instances/{instance_id}")
+def workflow_instance(instance_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        try:
+            instance = workflows.workflow_instance(conn, instance_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if instance is None:
+            raise HTTPException(status_code=404, detail=f"workflow instance {instance_id!r} not found")
+        return {
+            "board": selected,
+            "instance_id": instance["instance_id"],
+            "template_id": instance["template_id"],
+            "tasks": [task_dict(task) for task in instance["tasks"]],
+            "links": instance["links"],
+            "progress": instance["progress"],
+        }
+    finally:
+        conn.close()
 
 
 @router.get("/boards")
@@ -534,10 +998,14 @@ def board_view(
                 or needle in task.id.casefold()
             ]
 
+        links = [
+            {"parent_id": row["parent_id"], "child_id": row["child_id"]}
+            for row in conn.execute("SELECT parent_id, child_id FROM task_links ORDER BY parent_id, child_id").fetchall()
+        ]
         link_counts: dict[str, dict[str, int]] = {}
-        for row in conn.execute("SELECT parent_id, child_id FROM task_links").fetchall():
-            link_counts.setdefault(row["parent_id"], {"parents": 0, "children": 0})["children"] += 1
-            link_counts.setdefault(row["child_id"], {"parents": 0, "children": 0})["parents"] += 1
+        for link in links:
+            link_counts.setdefault(link["parent_id"], {"parents": 0, "children": 0})["children"] += 1
+            link_counts.setdefault(link["child_id"], {"parents": 0, "children": 0})["parents"] += 1
         comment_counts = {
             row["task_id"]: int(row["n"])
             for row in conn.execute("SELECT task_id, COUNT(*) AS n FROM task_comments GROUP BY task_id").fetchall()
@@ -573,6 +1041,7 @@ def board_view(
             "columns": columns,
             "column_order": BOARD_COLUMNS + (["archived"] if include_archived else []),
             "tasks": rows,
+            "links": links,
             "stats": kanban_db.board_stats(conn),
             "assignees": kanban_db.known_assignees(conn),
             "tenants": tenants,
@@ -616,6 +1085,12 @@ def create_task(payload: CreateTaskBody, board: Optional[str] = Query(None)) -> 
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if payload.status:
             _set_status_direct(conn, task_id, payload.status)
+        _apply_create_workflow_fields(
+            conn,
+            task_id,
+            workflow_template_id=payload.workflow_template_id,
+            current_step_key=payload.current_step_key,
+        )
         return _task_detail(conn, task_id, board=selected)
     finally:
         conn.close()
@@ -1070,6 +1545,58 @@ def dispatch(board: Optional[str] = Query(None), dry_run: bool = Query(True), ma
             return asdict(result)
         except Exception:
             return {"result": str(result)}
+    finally:
+        conn.close()
+
+
+@router.get("/home-channels")
+def home_channels(task_id: Optional[str] = Query(None), board: Optional[str] = Query(None)) -> dict[str, Any]:
+    homes = _configured_home_channels()
+    subscribed: set[tuple[str, str, str]] = set()
+    if task_id:
+        selected = _resolve_board(board)
+        conn = kanban_db.connect(board=selected)
+        try:
+            subscribed = {_home_subscription_key(sub) for sub in kanban_db.list_notify_subs(conn, task_id)}
+        finally:
+            conn.close()
+    return {"home_channels": [{**home, "subscribed": _home_subscription_key(home) in subscribed} for home in homes]}
+
+
+@router.post("/tasks/{task_id}/home-subscribe/{platform}")
+def subscribe_home_channel(task_id: str, platform: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    home = _home_for_platform(platform.strip().lower())
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        if kanban_db.get_task(conn, task_id) is None:
+            raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        kanban_db.add_notify_sub(
+            conn,
+            task_id=task_id,
+            platform=home["platform"],
+            chat_id=home["chat_id"],
+            thread_id=home["thread_id"] or None,
+        )
+        return {"ok": True, "task_id": task_id, "home_channel": home}
+    finally:
+        conn.close()
+
+
+@router.delete("/tasks/{task_id}/home-subscribe/{platform}")
+def unsubscribe_home_channel(task_id: str, platform: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    home = _home_for_platform(platform.strip().lower())
+    selected = _resolve_board(board)
+    conn = kanban_db.connect(board=selected)
+    try:
+        ok = kanban_db.remove_notify_sub(
+            conn,
+            task_id=task_id,
+            platform=home["platform"],
+            chat_id=home["chat_id"],
+            thread_id=home["thread_id"] or None,
+        )
+        return {"ok": ok, "task_id": task_id, "home_channel": home}
     finally:
         conn.close()
 

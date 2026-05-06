@@ -1,0 +1,13 @@
+[Unit]
+Description=Hermes KanbanWebUI
+After=network.target
+
+[Service]
+Type=simple
+Environment=HERMES_KANBAN_WEBUI_ENV=%h/.hermes/kanban-webui.env
+ExecStart=%h/.local/bin/hermes-kanban serve
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

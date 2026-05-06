@@ -1,10 +1,12 @@
-import { api } from './api.js?v=20260505-2';
-import { applyI18n, lang, setLang } from './i18n.js?v=20260505-2';
-import { renderBoard, renderKpis } from './board.js?v=20260505-2';
-import { setupForms } from './forms.js?v=20260505-2';
-import { setupMobileFallback } from './mobile.js?v=20260505-2';
-import { closeDrawer } from './drawer.js?v=20260505-2';
-import { state, setBoard, toast } from './state.js?v=20260505-2';
+import { api } from './api.js?v=20260506-02';
+import { applyI18n, lang, setLang, t } from './i18n.js?v=20260506-02';
+import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260506-02';
+import { renderBoard, renderKpis } from './board.js?v=20260506-02';
+import { setupDependencyControls } from './dependency-lines.js?v=20260506-02';
+import { setupForms } from './forms.js?v=20260506-02';
+import { setupMobileFallback } from './mobile.js?v=20260506-02';
+import { closeDrawer } from './drawer.js?v=20260506-02';
+import { state, setBoard, toast } from './state.js?v=20260506-02';
 
 async function loadBoards() {
   const data = await api.boards();
@@ -29,6 +31,47 @@ async function loadStatus() {
   if (serverLabel) serverLabel.textContent = `${status.service || 'kanban-webui'} · ${window.location.host}`;
 }
 
+function countAssigneeTasks(assignee) {
+  return Object.values(assignee.counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+}
+
+function assigneeOptionLabel(assignee) {
+  const count = countAssigneeTasks(assignee);
+  const kind = assignee.on_disk ? t('agentProfile') : t('manualAssignee');
+  return `${assignee.name} · ${kind}${count ? ` (${count})` : ''}`;
+}
+
+function appendOption(select, value, label) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  select.appendChild(option);
+}
+
+function renderAssigneeControls(data) {
+  const assignees = Array.isArray(data.assignees) ? data.assignees : [];
+  const profileAssignees = assignees.filter(item => item && item.on_disk);
+
+  const quick = document.getElementById('quickAssignee');
+  const previousQuick = quick.value || localStorage.getItem('lastAssignee') || '';
+  quick.replaceChildren();
+  appendOption(quick, '', t('unassigned'));
+  for (const assignee of profileAssignees) appendOption(quick, assignee.name, assigneeOptionLabel(assignee));
+  quick.value = profileAssignees.some(item => item.name === previousQuick) ? previousQuick : '';
+
+  const filter = document.getElementById('assigneeFilter');
+  const previousFilter = state.assignee || filter.value || '';
+  filter.replaceChildren();
+  appendOption(filter, '', t('allAssignees'));
+  for (const assignee of assignees) appendOption(filter, assignee.name, assigneeOptionLabel(assignee));
+  if (assignees.some(item => item.name === previousFilter)) {
+    filter.value = previousFilter;
+  } else {
+    filter.value = '';
+    state.assignee = '';
+  }
+}
+
 export async function load() {
   await api.config().then(cfg => { state.config = cfg; });
   await loadBoards();
@@ -41,6 +84,7 @@ export async function load() {
   const data = await api.board(params);
   state.data = data;
   state.latestEventId = data.latest_event_id;
+  renderAssigneeControls(data);
   document.getElementById('boardTitle').textContent = data.board_meta.name || data.board;
   document.getElementById('boardDescription').textContent = data.board_meta.description || 'Hermes CLI와 같은 DB를 사용하는 전용 칸반 WebUI';
   renderKpis(data);
@@ -50,7 +94,7 @@ export async function load() {
 
 function setupControls() {
   document.getElementById('refreshBtn').addEventListener('click', load);
-  document.getElementById('langToggle').addEventListener('click', () => { setLang(lang() === 'ko' ? 'en' : 'ko'); load(); });
+  document.getElementById('langToggle').addEventListener('click', () => { setLang(lang() === 'ko' ? 'en' : 'ko'); updateThemeToggleLabel(); load(); });
   document.getElementById('boardSelect').addEventListener('change', async ev => {
     setBoard(ev.target.value);
     await api.switchBoard(state.board);
@@ -81,7 +125,9 @@ async function pollEvents() {
 
 async function main() {
   applyI18n();
+  setupThemeToggle();
   setupControls();
+  setupDependencyControls();
   setupForms(load);
   setupMobileFallback();
   document.getElementById('quickAssignee').value = localStorage.getItem('lastAssignee') || '';
