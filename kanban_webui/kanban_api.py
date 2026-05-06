@@ -21,7 +21,8 @@ from .hermes_imports import kanban_db
 from .serializers import comment_dict, event_dict, links_for, run_dict, task_dict
 from .service_status import service_status
 from .ui_registry import registry
-from . import workflows
+from .config import get_settings
+from . import workflow_drafts, workflow_planner, workflows
 
 router = APIRouter(prefix="/api")
 
@@ -84,6 +85,32 @@ class WorkflowRequestBody(BaseModel):
     body: Optional[str] = None
     instance_id: Optional[str] = None
     assignee_overrides: dict[str, str] = Field(default_factory=dict)
+    created_by: Optional[str] = "kanban-webui"
+    workspace_kind: str = "scratch"
+    workspace_path: Optional[str] = None
+    tenant: Optional[str] = None
+    priority_offset: int = 0
+
+
+class WorkflowAttachmentBody(BaseModel):
+    filename: str
+    content: str
+    content_type: Optional[str] = "text/plain"
+
+
+class WorkflowDraftCreateBody(BaseModel):
+    prompt: str
+    planner_profile: Optional[str] = None
+    max_steps: Optional[int] = None
+    attachments: list[WorkflowAttachmentBody] = Field(default_factory=list)
+
+
+class WorkflowDraftReviseBody(BaseModel):
+    revision_prompt: str
+
+
+class WorkflowDraftInstantiateBody(BaseModel):
+    instance_id: Optional[str] = None
     created_by: Optional[str] = "kanban-webui"
     workspace_kind: str = "scratch"
     workspace_path: Optional[str] = None
@@ -339,6 +366,36 @@ def _resolve_board(slug: Optional[str]) -> str:
     if not kanban_db.board_exists(board):
         raise HTTPException(status_code=404, detail=f"board {board!r} does not exist")
     return board
+
+
+def _clamp_max_steps(value: Optional[int], default: int, maximum: int) -> int:
+    if value is None:
+        return max(1, min(int(default), int(maximum)))
+    return max(1, min(int(value), int(maximum)))
+
+
+def _raise_proposal_errors(validation: dict[str, Any]) -> None:
+    errors = validation.get("errors") or []
+    if errors:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+
+
+def _load_workflow_draft_for_board(settings: Settings, draft_id: str, board: str) -> dict[str, Any]:
+    try:
+        draft = workflow_drafts.load_draft(settings, draft_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if draft.get("board") != board:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found")
+    return draft
+
+
+def _raise_not_applyable(draft: dict[str, Any]) -> None:
+    proposal = draft.get("proposal") or {}
+    if proposal.get("applyable") is False:
+        raise HTTPException(status_code=409, detail="workflow draft is not applyable; revise it before applying")
 
 
 def _conn(board: Optional[str] = None):
@@ -617,53 +674,172 @@ def ui_registry() -> dict[str, Any]:
     return registry()
 
 
+def _deprecated_template_workflows() -> None:
+    raise HTTPException(
+        status_code=410,
+        detail="Template workflows are deprecated. Use /api/workflows/drafts instead.",
+    )
+
+
 @router.get("/workflows/templates")
 def workflow_templates() -> dict[str, Any]:
-    return {"templates": workflows.list_templates(), "errors": []}
+    _deprecated_template_workflows()
 
 
 @router.get("/workflows/templates/{template_id}")
 def workflow_template(template_id: str) -> dict[str, Any]:
-    try:
-        template = workflows.get_template(template_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"workflow template {template_id!r} not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    template["step_count"] = len(template.get("steps") or [])
-    return {"template": template}
+    _deprecated_template_workflows()
 
 
 @router.post("/workflows/preview")
 def workflow_preview(payload: WorkflowRequestBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
-    selected = _resolve_board(board)
-    try:
-        preview = workflows.preview_workflow(
-            payload.template_id,
-            title=payload.title,
-            body=payload.body,
-            assignee_overrides=payload.assignee_overrides,
-        )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"workflow template {payload.template_id!r} not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    preview["board"] = selected
-    return preview
+    _deprecated_template_workflows()
 
 
 @router.post("/workflows/instantiate")
 def workflow_instantiate(payload: WorkflowRequestBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    _deprecated_template_workflows()
+
+
+@router.post("/workflows/drafts")
+def create_workflow_draft(payload: WorkflowDraftCreateBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
     selected = _resolve_board(board)
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=422, detail="prompt is required")
+    settings = get_settings()
+    max_steps = _clamp_max_steps(payload.max_steps, settings.workflow_default_max_steps, settings.workflow_max_steps)
+    draft_id = workflow_drafts.new_draft_id()
+    draft_path = workflow_drafts.draft_dir(settings, draft_id)
     conn = kanban_db.connect(board=selected)
     try:
-        result = workflows.instantiate_workflow(
+        profiles = workflow_drafts.available_profiles(conn)
+        planner_profile = workflow_drafts.select_planner_profile(
+            payload.planner_profile,
+            settings=settings,
+            profiles=profiles,
+        )
+        attachments = workflow_drafts.normalize_attachment_inputs(
+            draft_path,
+            [item.model_dump() for item in payload.attachments],
+            max_files=settings.workflow_attachment_max_files,
+            max_bytes=settings.workflow_attachment_max_bytes,
+        )
+        proposal = workflow_planner.generate_workflow_proposal(
+            prompt=prompt,
+            planner_profile=planner_profile,
+            max_steps=max_steps,
+            attachments=attachments,
+            profiles=profiles,
+            settings=settings,
+        )
+        normalized, validation = workflow_drafts.normalize_proposal(
+            proposal,
+            available_profile_names=workflow_drafts.profile_names(profiles),
+            max_steps=max_steps,
+        )
+        _raise_proposal_errors(validation)
+        draft = workflow_drafts.create_draft_record(
+            settings=settings,
+            board=selected,
+            prompt=prompt,
+            planner_profile=planner_profile,
+            max_steps=max_steps,
+            attachments=attachments,
+            proposal=normalized,
+            validation=validation,
+            profiles=profiles,
+            draft_id=draft_id,
+        )
+        return {"ok": True, "board": selected, "draft": draft, "profiles": profiles}
+    except workflow_planner.PlannerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        conn.close()
+
+
+@router.get("/workflows/drafts/{draft_id}")
+def get_workflow_draft(draft_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    settings = get_settings()
+    draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+    return {"ok": True, "board": selected, "draft": draft, "profiles": draft.get("profiles") or []}
+
+
+@router.post("/workflows/drafts/{draft_id}/revise")
+def revise_workflow_draft(
+    draft_id: str,
+    payload: WorkflowDraftReviseBody,
+    board: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    revision_prompt = payload.revision_prompt.strip()
+    if not revision_prompt:
+        raise HTTPException(status_code=422, detail="revision_prompt is required")
+    settings = get_settings()
+    try:
+        draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+        if draft.get("status") == "applied":
+            raise HTTPException(status_code=409, detail="applied workflow drafts cannot be revised")
+        profiles = draft.get("profiles") or []
+        proposal = workflow_planner.generate_workflow_proposal(
+            prompt=draft.get("prompt") or "",
+            planner_profile=draft.get("planner_profile") or "default",
+            max_steps=int(draft.get("max_steps") or settings.workflow_default_max_steps),
+            attachments=draft.get("attachments") or [],
+            profiles=profiles,
+            settings=settings,
+            previous_proposal=draft.get("proposal"),
+            revision_prompt=revision_prompt,
+        )
+        normalized, validation = workflow_drafts.normalize_proposal(
+            proposal,
+            available_profile_names=workflow_drafts.profile_names(profiles),
+            max_steps=int(draft.get("max_steps") or settings.workflow_max_steps),
+        )
+        _raise_proposal_errors(validation)
+        draft = workflow_drafts.append_revision(
+            settings,
+            draft,
+            revision_prompt=revision_prompt,
+            proposal=normalized,
+            validation=validation,
+        )
+        return {"ok": True, "board": selected, "draft": draft, "profiles": profiles}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except HTTPException:
+        raise
+    except workflow_planner.PlannerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except workflow_drafts.DraftError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/workflows/drafts/{draft_id}/instantiate")
+def instantiate_workflow_draft(
+    draft_id: str,
+    payload: WorkflowDraftInstantiateBody,
+    board: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    settings = get_settings()
+    conn = kanban_db.connect(board=selected)
+    try:
+        draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+        if draft.get("status") == "applied":
+            raise HTTPException(status_code=409, detail="workflow draft has already been applied")
+        validation = draft.get("validation") or {}
+        _raise_proposal_errors(validation)
+        _raise_not_applyable(draft)
+        result = workflows.instantiate_steps_workflow(
             conn,
-            payload.template_id,
-            title=payload.title,
-            body=payload.body,
+            source_id=workflow_drafts.PROMPT_WORKFLOW_SOURCE_ID,
+            source_name=workflow_drafts.PROMPT_WORKFLOW_SOURCE_NAME,
+            steps=workflow_drafts.steps_for_instantiation(draft),
             instance_id=payload.instance_id,
-            assignee_overrides=payload.assignee_overrides,
             created_by=payload.created_by,
             workspace_kind=payload.workspace_kind,
             workspace_path=payload.workspace_path,
@@ -671,10 +847,20 @@ def workflow_instantiate(payload: WorkflowRequestBody, board: Optional[str] = Qu
             priority_offset=payload.priority_offset,
         )
         result["board"] = selected
+        workflow_drafts.mark_applied(
+            settings,
+            draft,
+            instance_id=result["instance_id"],
+            result=result,
+        )
         return result
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"workflow template {payload.template_id!r} not found") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except HTTPException:
+        raise
     except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except workflow_drafts.DraftError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         conn.close()

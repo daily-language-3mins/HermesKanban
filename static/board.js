@@ -1,8 +1,8 @@
-import { t } from './i18n.js?v=20260506-01';
-import { escapeHtml } from './markdown.js?v=20260506-01';
-import { openTaskDrawer } from './drawer.js?v=20260506-01';
-import { attachDragHandlers } from './dragdrop.js?v=20260506-01';
-import { clearDependencyFocus, focusDependencyTask, renderDependencyOverlay, selectDependencyTask } from './dependency-lines.js?v=20260506-01';
+import { t } from './i18n.js?v=20260506-02';
+import { escapeHtml } from './markdown.js?v=20260506-02';
+import { openTaskDrawer } from './drawer.js?v=20260506-02';
+import { attachDragHandlers } from './dragdrop.js?v=20260506-02';
+import { clearDependencyFocus, focusDependencyTask, renderDependencyOverlay, selectDependencyTask } from './dependency-lines.js?v=20260506-02';
 
 function card(task) {
   const chips = [task.assignee ? `@${task.assignee}` : 'unassigned', task.tenant, task.priority ? `P${task.priority}` : null].filter(Boolean);

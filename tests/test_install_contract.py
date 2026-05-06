@@ -70,6 +70,13 @@ def test_hermes_kanban_wrapper_exposes_lifecycle_doctor_service_commands():
         assert phrase in wrapper
 
 
+def test_hermes_kanban_restart_can_continue_after_stop_helper():
+    wrapper = read("scripts/hermes-kanban")
+
+    assert 'restart) stop_cmd || true; start_cmd "$@" ;;' in wrapper
+    assert 'exec "$APP_DIR/scripts/hermes-kanban-webui-stop"' not in wrapper
+
+
 def test_env_example_is_localhost_first_and_secret_free():
     env = read(".env.example")
 

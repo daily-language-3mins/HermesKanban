@@ -10,6 +10,8 @@ new Hermes profile, dispatcher, or database.
 - Python 3.11+
 - `uv` on `PATH`
 - Hermes Agent installed, or a Hermes Agent checkout at `~/.hermes/hermes-agent`
+- For AI Workflow Designer: at least one usable Hermes profile that can run
+  `hermes -p <profile> chat` for JSON-only planning
 
 ## Quick install
 
@@ -34,6 +36,39 @@ Open <http://127.0.0.1:8790>.
 
 The repository checkout stays where you cloned it. The wrapper stores that path
 in `~/.hermes/kanban-webui.env` as `HERMES_KANBAN_WEBUI_APP_DIR`.
+
+## AI Workflow Designer settings
+
+The Workflow button opens a prompt-based designer. It asks a Hermes planner
+profile to produce a draft DAG, lets you revise the draft, and only creates real
+Kanban tasks when you click apply. Applying does not auto-dispatch workers.
+
+Useful env values in `~/.hermes/kanban-webui.env`:
+
+```bash
+# Disable AI planner calls if you only want manual tasks.
+HERMES_KANBAN_WORKFLOW_AI_ENABLED=true
+
+# Optional. If empty, fallback is request value -> dev_plan -> default -> first profile on disk.
+HERMES_KANBAN_WORKFLOW_PLANNER_PROFILE=
+
+# Draft/attachment limits for text-like files.
+HERMES_KANBAN_WORKFLOW_DEFAULT_MAX_STEPS=8
+HERMES_KANBAN_WORKFLOW_MAX_STEPS=20
+HERMES_KANBAN_WORKFLOW_ATTACHMENT_MAX_FILES=5
+HERMES_KANBAN_WORKFLOW_ATTACHMENT_MAX_BYTES=200000
+HERMES_KANBAN_WORKFLOW_PLANNER_TIMEOUT_SECONDS=180
+```
+
+Attachments are MVP text inputs: markdown, text, JSON/YAML/CSV, and source files
+are read in the browser and sent as text. Binary/OCR/audio interpretation is not
+part of this MVP.
+
+After editing the env file, restart:
+
+```bash
+hermes-kanban restart
+```
 
 ## Custom install paths
 

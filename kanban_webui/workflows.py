@@ -242,6 +242,90 @@ def instantiate_workflow(
     }
 
 
+def instantiate_steps_workflow(
+    conn,
+    *,
+    source_id: str,
+    source_name: str,
+    steps: list[dict[str, Any]],
+    instance_id: Optional[str] = None,
+    created_by: Optional[str] = "kanban-webui",
+    workspace_kind: str = "scratch",
+    workspace_path: Optional[str] = None,
+    tenant: Optional[str] = None,
+    priority_offset: int = 0,
+) -> dict[str, Any]:
+    """Instantiate an already-validated workflow proposal as linked Kanban tasks."""
+    instance = normalize_instance_id(instance_id)
+    ordered_steps = _topological_steps(steps)
+    step_task_ids: dict[str, str] = {}
+    results: list[dict[str, Any]] = []
+    created_count = 0
+    existing_count = 0
+
+    for step in ordered_steps:
+        step_key = str(step.get("step_key") or step.get("key") or "")
+        if not step_key:
+            raise ValueError("workflow step key is required")
+        idem = idempotency_key(instance, step_key)
+        existing_id = task_id_for_idempotency(conn, idem)
+        parent_keys = list(step.get("depends_on") or [])
+        parents = [step_task_ids[parent_key] for parent_key in parent_keys]
+        if existing_id:
+            task_id = existing_id
+            existing_count += 1
+        else:
+            task_id = kanban_db.create_task(
+                conn,
+                title=str(step.get("title") or step_key),
+                body=step.get("body"),
+                assignee=step.get("assignee"),
+                created_by=created_by,
+                workspace_kind=workspace_kind,
+                workspace_path=workspace_path,
+                tenant=tenant,
+                priority=int(step.get("priority") or 0) + int(priority_offset or 0),
+                parents=parents,
+                triage=step.get("status") == "triage",
+                idempotency_key=idem,
+                max_runtime_seconds=step.get("max_runtime_seconds"),
+                skills=step.get("skills") or None,
+            )
+            created_count += 1
+        step_task_ids[step_key] = task_id
+        attach_workflow_fields(conn, task_id, source_id, step_key)
+        task = kanban_db.get_task(conn, task_id)
+        results.append(
+            {
+                "step_key": step_key,
+                "task_id": task_id,
+                "title": task.title if task else str(step.get("title") or step_key),
+                "status": task.status if task else str(step.get("status") or "ready"),
+                "assignee": task.assignee if task else step.get("assignee"),
+                "idempotency_key": idem,
+                "existing": bool(existing_id),
+            }
+        )
+
+    preview_links = _preview_links([
+        {"step_key": str(step.get("step_key") or step.get("key")), "depends_on": list(step.get("depends_on") or [])}
+        for step in ordered_steps
+    ])
+    for link in preview_links:
+        kanban_db.link_tasks(conn, step_task_ids[link["parent_step"]], step_task_ids[link["child_step"]])
+
+    return {
+        "ok": True,
+        "template_id": source_id,
+        "template_name": source_name,
+        "instance_id": instance,
+        "created": created_count,
+        "existing": existing_count,
+        "tasks": results,
+        "links": _instantiated_links(preview_links, step_task_ids),
+    }
+
+
 def workflow_instance(conn, instance_id: str) -> Optional[dict[str, Any]]:
     instance = validate_instance_id(instance_id)
     prefix = f"{WORKFLOW_PREFIX}{instance}:"
@@ -253,10 +337,14 @@ def workflow_instance(conn, instance_id: str) -> Optional[dict[str, Any]]:
         return None
     tasks = [kanban_db.Task.from_row(row) for row in rows]
     template_id = next((task.workflow_template_id for task in tasks if task.workflow_template_id), None)
-    order = _step_order(template_id)
-    tasks.sort(key=lambda task: (order.get(task.current_step_key or "", 10_000), task.created_at, task.id))
+    template_order = _step_order(template_id)
     task_ids = [task.id for task in tasks]
     links = _links_between_tasks(conn, task_ids)
+    if template_order:
+        tasks.sort(key=lambda task: (template_order.get(task.current_step_key or "", 10_000), task.created_at, task.id))
+    else:
+        dependency_order = _dependency_task_order(task_ids, links)
+        tasks.sort(key=lambda task: (dependency_order.get(task.id, 10_000), task.created_at, task.id))
     done = sum(1 for task in tasks if task.status == "done")
     return {
         "instance_id": instance,
@@ -393,6 +481,31 @@ def _instantiated_links(links: list[dict[str, str]], step_task_ids: dict[str, st
     return out
 
 
+def _topological_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_key = {str(step.get("step_key") or step.get("key")): step for step in steps}
+    ordered: list[dict[str, Any]] = []
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(key: str) -> None:
+        if key in visited:
+            return
+        if key in visiting:
+            raise ValueError("workflow step graph cannot contain cycles")
+        if key not in by_key:
+            raise ValueError(f"workflow step depends on unknown step {key}")
+        visiting.add(key)
+        for parent in by_key[key].get("depends_on") or []:
+            visit(str(parent))
+        visiting.remove(key)
+        visited.add(key)
+        ordered.append(by_key[key])
+
+    for step in steps:
+        visit(str(step.get("step_key") or step.get("key")))
+    return ordered
+
+
 def _links_between_tasks(conn, task_ids: list[str]) -> list[dict[str, str]]:
     if not task_ids:
         return []
@@ -421,6 +534,32 @@ def _links_between_tasks(conn, task_ids: list[str]) -> list[dict[str, str]]:
         }
         for row in sorted_rows
     ]
+
+
+def _dependency_task_order(task_ids: list[str], links: list[dict[str, str]]) -> dict[str, int]:
+    children: dict[str, list[str]] = {task_id: [] for task_id in task_ids}
+    parents: dict[str, set[str]] = {task_id: set() for task_id in task_ids}
+    for link in links:
+        parent_id = link["parent_id"]
+        child_id = link["child_id"]
+        if parent_id in children and child_id in parents:
+            children[parent_id].append(child_id)
+            parents[child_id].add(parent_id)
+    ready = [task_id for task_id in task_ids if not parents[task_id]]
+    ordered: list[str] = []
+    while ready:
+        task_id = ready.pop(0)
+        if task_id in ordered:
+            continue
+        ordered.append(task_id)
+        for child_id in children.get(task_id, []):
+            parents[child_id].discard(task_id)
+            if not parents[child_id]:
+                ready.append(child_id)
+    for task_id in task_ids:
+        if task_id not in ordered:
+            ordered.append(task_id)
+    return {task_id: index for index, task_id in enumerate(ordered)}
 
 
 def _step_order(template_id: Optional[str]) -> dict[str, int]:

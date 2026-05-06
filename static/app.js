@@ -1,12 +1,12 @@
-import { api } from './api.js?v=20260506-01';
-import { applyI18n, lang, setLang, t } from './i18n.js?v=20260506-01';
-import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260506-01';
-import { renderBoard, renderKpis } from './board.js?v=20260506-01';
-import { setupDependencyControls } from './dependency-lines.js?v=20260506-01';
-import { populateWorkflowTemplateSelect, setupForms } from './forms.js?v=20260506-01';
-import { setupMobileFallback } from './mobile.js?v=20260506-01';
-import { closeDrawer } from './drawer.js?v=20260506-01';
-import { state, setBoard, toast } from './state.js?v=20260506-01';
+import { api } from './api.js?v=20260506-02';
+import { applyI18n, lang, setLang, t } from './i18n.js?v=20260506-02';
+import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260506-02';
+import { renderBoard, renderKpis } from './board.js?v=20260506-02';
+import { setupDependencyControls } from './dependency-lines.js?v=20260506-02';
+import { setupForms } from './forms.js?v=20260506-02';
+import { setupMobileFallback } from './mobile.js?v=20260506-02';
+import { closeDrawer } from './drawer.js?v=20260506-02';
+import { state, setBoard, toast } from './state.js?v=20260506-02';
 
 async function loadBoards() {
   const data = await api.boards();
@@ -20,12 +20,6 @@ async function loadBoards() {
   }
   if (!data.boards.find(b => b.slug === state.board)) setBoard(data.current || 'default');
   select.value = state.board;
-}
-
-async function loadWorkflowTemplates() {
-  const data = await api.workflowTemplates();
-  state.workflowTemplates = data.templates || [];
-  populateWorkflowTemplateSelect();
 }
 
 async function loadStatus() {
@@ -80,7 +74,6 @@ function renderAssigneeControls(data) {
 
 export async function load() {
   await api.config().then(cfg => { state.config = cfg; });
-  await loadWorkflowTemplates();
   await loadBoards();
   const params = {
     board: state.board,

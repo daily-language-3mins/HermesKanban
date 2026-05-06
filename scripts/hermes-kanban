@@ -164,7 +164,8 @@ stop_cmd() {
   source_env
   normalize_runtime_env
   if [[ -x "$APP_DIR/scripts/hermes-kanban-webui-stop" ]]; then
-    exec "$APP_DIR/scripts/hermes-kanban-webui-stop"
+    "$APP_DIR/scripts/hermes-kanban-webui-stop"
+    return $?
   fi
 
   if [[ ! -f "$PID_FILE" ]]; then

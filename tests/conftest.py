@@ -7,7 +7,10 @@ from fastapi.testclient import TestClient
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     home = tmp_path / 'hermes-home'
+    webui_state = tmp_path / 'kanban-webui-state'
     monkeypatch.setenv('HERMES_KANBAN_HOME', str(home))
+    monkeypatch.setenv('HERMES_REAL_HOME', str(home))
+    monkeypatch.setenv('HERMES_KANBAN_WEBUI_STATE', str(webui_state))
     monkeypatch.delenv('HERMES_KANBAN_DB', raising=False)
     monkeypatch.delenv('HERMES_KANBAN_BOARD', raising=False)
     monkeypatch.delenv('HERMES_KANBAN_WEBUI_TOKEN', raising=False)

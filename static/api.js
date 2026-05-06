@@ -3,6 +3,13 @@ function tokenHeaders() {
   return token ? { 'X-Kanban-Token': token } : {};
 }
 
+function errorMessage(data, fallback) {
+  const message = data.detail || data.error || fallback;
+  if (Array.isArray(message)) return message.map(x => x.msg || JSON.stringify(x)).join(', ');
+  if (message && typeof message === 'object') return JSON.stringify(message);
+  return message;
+}
+
 export async function request(path, options = {}) {
   const headers = { ...(options.headers || {}), ...tokenHeaders() };
   let body = options.body;
@@ -14,10 +21,7 @@ export async function request(path, options = {}) {
   const text = await res.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-  if (!res.ok) {
-    const message = data.detail || data.error || res.statusText;
-    throw new Error(Array.isArray(message) ? message.map(x => x.msg || JSON.stringify(x)).join(', ') : message);
-  }
+  if (!res.ok) throw new Error(errorMessage(data, res.statusText));
   return data;
 }
 
@@ -34,9 +38,10 @@ export const api = {
   boards: () => request('/api/boards'),
   createBoard: payload => request('/api/boards', { method: 'POST', body: payload }),
   switchBoard: slug => request(`/api/boards/${encodeURIComponent(slug)}/switch`, { method: 'POST' }),
-  workflowTemplates: () => request('/api/workflows/templates'),
-  workflowPreview: (board, payload) => request(`/api/workflows/preview?${boardQuery(board)}`, { method: 'POST', body: payload }),
-  instantiateWorkflow: (board, payload) => request(`/api/workflows/instantiate?${boardQuery(board)}`, { method: 'POST', body: payload }),
+  createWorkflowDraft: (board, payload) => request(`/api/workflows/drafts?${boardQuery(board)}`, { method: 'POST', body: payload }),
+  getWorkflowDraft: (board, draftId) => request(`/api/workflows/drafts/${encodeURIComponent(draftId)}?${boardQuery(board)}`),
+  reviseWorkflowDraft: (board, draftId, payload) => request(`/api/workflows/drafts/${encodeURIComponent(draftId)}/revise?${boardQuery(board)}`, { method: 'POST', body: payload }),
+  instantiateWorkflowDraft: (board, draftId, payload = {}) => request(`/api/workflows/drafts/${encodeURIComponent(draftId)}/instantiate?${boardQuery(board)}`, { method: 'POST', body: payload }),
   workflowInstance: (board, instanceId) => request(`/api/workflows/instances/${encodeURIComponent(instanceId)}?${boardQuery(board)}`),
   board: params => {
     const clean = {};
@@ -50,7 +55,7 @@ export const api = {
   bulkCreate: (board, payload) => request(`/api/tasks/bulk-create?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
   task: (board, id) => request(`/api/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ board })}`),
   updateTask: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ board })}`, { method: 'PATCH', body: payload }),
-  comment: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}/comments?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
+  comment: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}/comments?${new URLSearchParams({ board })}`, { method: 'POST' , body: payload }),
   linkTask: (board, payload) => request(`/api/links?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
   unlinkTask: (board, parentId, childId) => request(`/api/links?${new URLSearchParams({ board, parent_id: parentId, child_id: childId })}`, { method: 'DELETE' }),
   taskLog: (board, id, tail = 100000) => request(`/api/tasks/${encodeURIComponent(id)}/log?${new URLSearchParams({ board, tail })}`),

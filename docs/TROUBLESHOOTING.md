@@ -63,6 +63,55 @@ HERMES_KANBAN_WEBUI_ALLOWED_HOSTS=my-host.example.ts.net
 Keep `HERMES_KANBAN_WEBUI_HOST=127.0.0.1` unless you intentionally need a
 network bind, and set `HERMES_KANBAN_WEBUI_TOKEN` if exposing beyond localhost.
 
+## Workflow Designer planner fails
+
+Check the WebUI log first:
+
+```bash
+hermes-kanban logs
+```
+
+Common causes:
+
+- `HERMES_KANBAN_WORKFLOW_AI_ENABLED=0` disables planner calls.
+- The selected planner profile does not exist on disk.
+- Hermes CLI cannot chat from that profile because model/auth config is missing.
+- The planner returned non-JSON or JSON that does not match the workflow schema.
+
+Verify the profile outside the WebUI:
+
+```bash
+HOME="$HOME" HERMES_HOME="$HOME/.hermes" hermes -p dev_plan chat -Q -q 'Reply exactly: OK'
+```
+
+Use the actual planner profile if it is not `dev_plan`. If you want a specific
+profile, set it in `~/.hermes/kanban-webui.env` and restart:
+
+```bash
+HERMES_KANBAN_WORKFLOW_PLANNER_PROFILE=dev_plan
+hermes-kanban restart
+```
+
+If a generated task later fails with `Error: Unknown skill(s): kanban-worker`,
+the task assignee profile has disabled the built-in `kanban-worker` skill. Remove
+`kanban-worker` from that profile's `skills.disabled` list, then verify:
+
+```bash
+hermes -p <profile> skills list | grep kanban-worker
+```
+
+## Workflow attachment rejected
+
+The MVP accepts text-like files only. Browser-side file reading sends text to the
+server; binary/OCR/audio interpretation is not included. Adjust limits in
+`~/.hermes/kanban-webui.env` if needed:
+
+```bash
+HERMES_KANBAN_WORKFLOW_ATTACHMENT_MAX_FILES=5
+HERMES_KANBAN_WORKFLOW_ATTACHMENT_MAX_BYTES=200000
+hermes-kanban restart
+```
+
 ## API returns 401
 
 If `HERMES_KANBAN_WEBUI_TOKEN` is set, clients must send one of:

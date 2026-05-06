@@ -40,9 +40,9 @@ def test_dark_mode_static_contract():
 
     assert 'id="themeToggle"' in index
     assert 'aria-pressed="false"' in index
-    assert 'style.css?v=20260506-01' in index
-    assert 'app.js?v=20260506-01' in index
-    assert './theme.js?v=20260506-01' in app
+    assert 'style.css?v=20260506-02' in index
+    assert 'app.js?v=20260506-02' in index
+    assert './theme.js?v=20260506-02' in app
     assert 'setupThemeToggle' in app
     assert 'updateThemeToggleLabel' in app
     assert 'kanbanTheme' in theme
@@ -147,23 +147,34 @@ def test_workflow_static_contract():
         'id="workflowBtn"',
         'id="workflowDialog"',
         'id="workflowForm"',
-        'id="workflowTemplateSelect"',
-        'id="workflowPreview"',
+        'id="workflowPrompt"',
+        'id="workflowPlannerProfile"',
+        'id="workflowAttachments"',
+        'id="workflowDraftPreview"',
+        'id="workflowRevisionPrompt"',
+        'data-workflow-plan',
+        'data-workflow-revise',
+        'data-workflow-apply',
     ]:
         assert phrase in index
 
-    for phrase in ['workflowTemplates', 'workflowPreview', 'instantiateWorkflow']:
+    for removed in ['workflowTemplateSelect', 'Workflow 템플릿', 'workflowTemplates', 'workflowPreview', 'instantiateWorkflow']:
+        assert removed not in index
+        assert removed not in app
+
+    for phrase in ['createWorkflowDraft', 'reviseWorkflowDraft', 'getWorkflowDraft', 'instantiateWorkflowDraft']:
         assert phrase in api
 
-    for phrase in ['setupWorkflowDialog', 'data-workflow-preview', 'api.instantiateWorkflow', 'api.workflowPreview']:
+    for phrase in ['setupWorkflowDialog', 'workflowPrompt', 'api.createWorkflowDraft', 'api.reviseWorkflowDraft', 'api.instantiateWorkflowDraft', 'proposal?.applyable === false', 'workflowNotApplyable']:
         assert phrase in forms
 
-    assert 'loadWorkflowTemplates' in app
+    assert 'loadWorkflowTemplates' not in app
+    assert 'populateWorkflowTemplateSelect' not in app
     assert 'workflow-chip' in board
     assert 'workflowDetailSection' in drawer
-    for key in ['workflowCreate', 'workflowTemplate', 'workflowPreview', 'workflowInstance', 'workflowSteps']:
+    for key in ['workflowCreate', 'workflowPrompt', 'workflowPlannerProfile', 'workflowAttachments', 'workflowRevise', 'workflowApply', 'workflowDraftStatus', 'workflowNotApplyable', 'workflowSteps']:
         assert key in i18n
-    for css_class in ['.workflow-step-list', '.workflow-step', '.workflow-chip', '.workflow-meta']:
+    for css_class in ['.workflow-step-list', '.workflow-step', '.workflow-chip', '.workflow-meta', '.workflow-draft-actions', '.workflow-attachment-list']:
         assert css_class in style
 
 

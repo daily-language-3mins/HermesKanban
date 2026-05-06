@@ -15,6 +15,9 @@ same SQLite board data.
   drag-and-drop status changes.
 - Task detail drawer with comments, events, runs, markdown rendering, and a
   Live Run Monitor for running tasks.
+- Prompt-driven AI Workflow Designer: enter a goal plus optional text files,
+  review/revise the proposed task DAG, then apply it as Kanban tasks with
+  parent-child dependencies.
 - Korean UI by default with an English toggle.
 - Optional token auth for `/api/*` endpoints.
 - Loopback-first runtime with Host-header and cross-origin mutation checks for
@@ -78,6 +81,13 @@ uv run python server.py --host 127.0.0.1 --port 8790
 | `HERMES_KANBAN_WEBUI_TOKEN` | unset | Optional API token. When set, `/api/*` and `/service/status` require auth. |
 | `HERMES_KANBAN_WEBUI_ALLOWED_HOSTS` | unset | Comma-separated DNS hostnames allowed by Host-header validation, e.g. a Tailscale MagicDNS name. |
 | `HERMES_REAL_HOME` | auto-detected | Override for the real OS home when running inside a Hermes profile HOME. |
+| `HERMES_KANBAN_WORKFLOW_AI_ENABLED` | `true` | Enables AI workflow draft generation. Set `0`/`false`/`off` to disable. |
+| `HERMES_KANBAN_WORKFLOW_PLANNER_PROFILE` | auto | Preferred Hermes planner profile. Fallback is request value → env → `dev_plan` if present → `default` if present → first on-disk profile. |
+| `HERMES_KANBAN_WORKFLOW_DEFAULT_MAX_STEPS` | `8` | Default maximum steps requested from the planner. |
+| `HERMES_KANBAN_WORKFLOW_MAX_STEPS` | `20` | Hard maximum accepted workflow steps. |
+| `HERMES_KANBAN_WORKFLOW_ATTACHMENT_MAX_FILES` | `5` | Maximum text attachments per workflow draft. |
+| `HERMES_KANBAN_WORKFLOW_ATTACHMENT_MAX_BYTES` | `200000` | Maximum bytes per text attachment. |
+| `HERMES_KANBAN_WORKFLOW_PLANNER_TIMEOUT_SECONDS` | `180` | Timeout for the Hermes CLI planner call. |
 
 State/log defaults resolve to the real OS home when possible, not to Hermes'
 profile HOME such as `~/.hermes/profiles/<profile>/home`.
@@ -184,6 +194,22 @@ uv run python server.py --host 127.0.0.1 --port 8790
 
 Then expose `127.0.0.1:8790` through your chosen Tailscale/reverse-proxy setup.
 
+## AI Workflow Designer
+
+Use **Workflow 생성** to turn a prompt into an editable workflow draft:
+
+1. Enter a goal, constraints, and desired outputs.
+2. Optionally attach text-like files (`.md`, `.txt`, source code, JSON/YAML/CSV).
+3. Click **설계** to let a Hermes planner profile generate a task DAG.
+4. Review warnings/questions, step bodies, assignees, and dependencies.
+5. Use a revision prompt if needed, then click **적용**.
+
+Applying a draft creates normal Kanban tasks and `task_links`; it does not auto-dispatch workers. Root steps become ready, dependent steps stay todo until their parents finish. Applied drafts are immutable; create a new draft to change an already-applied workflow.
+
+Planner profile selection does not hard-code `dev_plan`. The server resolves the profile from the request, env override, `dev_plan` if present, `default` if present, then the first on-disk profile. The planner is run through Hermes CLI with no extra toolsets and must return JSON.
+
+The old built-in workflow template API is deprecated and returns `410 Gone`; prompt drafts are the supported workflow creation path.
+
 ## API highlights
 
 - `GET /health`
@@ -201,6 +227,12 @@ Then expose `127.0.0.1:8790` through your chosen Tailscale/reverse-proxy setup.
 - `GET /api/tasks/{task_id}/monitor`
 - `GET /api/tasks/{task_id}/log|context|runs|events`
 - `GET /api/events` and `GET /api/events/stream`
+- `POST /api/workflows/drafts`
+- `GET /api/workflows/drafts/{draft_id}`
+- `POST /api/workflows/drafts/{draft_id}/revise`
+- `POST /api/workflows/drafts/{draft_id}/instantiate`
+- `GET /api/workflows/instances/{instance_id}`
+- `GET /api/workflows/templates...` returns `410 Gone` for deprecated template workflows.
 - `GET /api/stats`, `GET /api/assignees`
 - `POST /api/dispatch` (`dry_run=true` by default; non-dry-run requires
   `confirm=dispatch`)
@@ -213,9 +245,9 @@ uv run --extra test python -m compileall -q kanban_webui server.py bootstrap.py
 uv run --extra test python -m pytest -q
 ```
 
-The suite covers health/config, board CRUD/switch, task lifecycle, Live Run
-Monitor, auth, static shell, JavaScript syntax, drag/drop contract, and CLI
-parity registry.
+The suite covers health/config, board CRUD/switch, task lifecycle, workflow
+prompt drafts/instantiation, Live Run Monitor, auth, static shell, JavaScript
+syntax, drag/drop contract, and CLI parity registry.
 
 Optional design token check:
 
