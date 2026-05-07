@@ -11,21 +11,23 @@ same SQLite board data.
 
 ![Kanban board overview](docs/assets/screenshots/kanban-board-overview.png)
 
-The main board shows the same Hermes Kanban tasks as the CLI, with responsive
-columns, filters, quick creation, drag-and-drop status changes, dependency
-visibility, and dark-mode support.
+The main board screenshot is captured in light mode with English demo data. It
+shows the same Hermes Kanban tasks as the CLI, with responsive columns, filters,
+task creation, drag-and-drop status changes, running work, and visible
+parent/child dependency lines across a multi-step launch workflow.
 
 ![AI Workflow Designer](docs/assets/screenshots/ai-workflow-designer.png)
 
-The AI Workflow Designer turns a prompt and optional text attachments into an
-editable workflow draft before any real Kanban tasks are created.
+The AI Workflow Designer screenshot is also light-mode English UI. It shows a
+prompt, planner profile, revision prompt, warnings, and a generated step-by-step
+task DAG before any real Kanban tasks are created.
 
 ## Features
 
 This project separates what already belongs to Hermes Agent from what the WebUI
 adds on top. The WebUI is a companion interface, not a replacement task runner.
 
-### Hermes Agent 기본 기능
+### Hermes Agent core
 
 Hermes Agent already provides the core Kanban execution model:
 
@@ -43,20 +45,21 @@ Hermes Agent already provides the core Kanban execution model:
 - Hermes-wide concerns such as model/provider configuration, skills, toolsets,
   gateway platforms, memory, credentials, and profile isolation.
 
-### KanbanWebUI 추가 기능
+### KanbanWebUI additions
 
 KanbanWebUI adds a browser-first operations layer over that existing Hermes
 Kanban data:
 
 - Responsive Trello-style board columns for `triage`, `todo`, `ready`,
   `running`, `blocked`, and `done`.
-- Quick task creation, bulk task creation, board CRUD/switching, filters, search,
-  archive visibility, and drag-and-drop status changes.
+- Task creation dialog, bulk task creation, board CRUD/switching, filters,
+  search, archive visibility, and drag-and-drop status changes.
 - Task detail drawer with editable metadata/body, comments, events, runs,
   markdown rendering, dependency controls, home-channel notification toggles,
   and a Live Run Monitor for running tasks.
-- Dependency visualization on the board and task drawer so parent/child task
-  relationships are visible without leaving the browser.
+- Dependency visualization on the board and task drawer, including focus/all/
+  blocked/off display modes, so parent/child relationships are visible without
+  leaving the browser.
 - Prompt-driven AI Workflow Designer: enter a goal plus optional text files,
   review/revise the proposed task DAG, then apply it as normal Kanban tasks with
   parent-child dependencies.
@@ -66,6 +69,9 @@ Kanban data:
 - Optional token auth for `/api/*` endpoints.
 - Loopback-first runtime with Host-header and cross-origin mutation checks for
   safer localhost/Tailscale usage.
+- Safe in-app update prompt for clone-based installs: the WebUI checks
+  `origin/main`, lists incoming commits, and only applies fast-forward updates
+  from a clean local `main` checkout.
 
 ## Requirements
 
@@ -176,6 +182,24 @@ If you copy only those legacy scripts to another directory such as
 The start script uses `uv` from `PATH`, or `UV=/absolute/path/to/uv` if you need
 to override it.
 
+## In-app self-update
+
+Clone-based installs can update from the browser when a newer `origin/main` is
+available. The WebUI polls `GET /api/app/update-status`, shows incoming commit
+subjects, and applies updates through `POST /api/app/update`.
+
+The updater is intentionally conservative:
+
+- Fixed target: `origin/main` only.
+- Requires the current branch to be `main`.
+- Refuses dirty working trees, diverged history, non-fast-forward updates, and
+  missing `git`/remote prerequisites.
+- Runs `git pull --ff-only origin main`, then `uv sync`, then restarts the
+  current server process so the browser can reload onto the new code.
+
+If the checkout is intentionally edited locally, update it with Git manually
+instead of using the browser prompt.
+
 ## systemd user service
 
 The preferred install path is generated from your env file:
@@ -240,13 +264,13 @@ Then expose `127.0.0.1:8790` through your chosen Tailscale/reverse-proxy setup.
 
 ## AI Workflow Designer
 
-Use **Workflow 생성** to turn a prompt into an editable workflow draft:
+Use **Create AI workflow** to turn a prompt into an editable workflow draft:
 
 1. Enter a goal, constraints, and desired outputs.
 2. Optionally attach text-like files (`.md`, `.txt`, source code, JSON/YAML/CSV).
-3. Click **설계** to let a Hermes planner profile generate a task DAG.
+3. Click **Plan** to let a Hermes planner profile generate a task DAG.
 4. Review warnings/questions, step bodies, assignees, and dependencies.
-5. Use a revision prompt if needed, then click **적용**.
+5. Use a revision prompt if needed, then click **Apply**.
 
 Applying a draft creates normal Kanban tasks and `task_links`; it does not auto-dispatch workers. Root steps become ready, dependent steps stay todo until their parents finish. Applied drafts are immutable; create a new draft to change an already-applied workflow.
 
@@ -259,6 +283,8 @@ The old built-in workflow template API is deprecated and returns `410 Gone`; pro
 - `GET /health`
 - `GET /api/config`
 - `GET /api/service/status`
+- `GET /api/app/update-status`
+- `POST /api/app/update`
 - `POST /api/init`
 - `GET/POST/PATCH/DELETE /api/boards...`
 - `GET /api/board`
@@ -290,8 +316,8 @@ uv run --extra test python -m pytest -q
 ```
 
 The suite covers health/config, board CRUD/switch, task lifecycle, workflow
-prompt drafts/instantiation, Live Run Monitor, auth, static shell, JavaScript
-syntax, drag/drop contract, and CLI parity registry.
+prompt drafts/instantiation, safe self-update guards, Live Run Monitor, auth,
+static shell, JavaScript syntax, drag/drop contract, and CLI parity registry.
 
 Optional design token check:
 
@@ -309,6 +335,11 @@ It runs:
 - JavaScript syntax checks for every static module.
 - `DESIGN.md` lint.
 
+Release automation is included at `.github/workflows/release.yml`. On a pushed
+`v*` tag, or manual dispatch with a tag, it extracts that version's changelog
+section and creates the GitHub Release with `GITHUB_TOKEN` if it does not already
+exist.
+
 ## Release management
 
 - License: Apache-2.0. See `LICENSE`.
@@ -324,8 +355,11 @@ git pull origin main
 uv run --extra test python -m pytest -q
 git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
-gh release create v0.1.0 --title "v0.1.0" --notes-file CHANGELOG.md
 ```
+
+The `Release` GitHub Actions workflow creates the GitHub Release from the
+matching `CHANGELOG.md` section. You can also run the workflow manually with a
+`tag` input when a release tag already exists.
 
 ## Installable package roadmap
 
@@ -350,10 +384,11 @@ Completed:
 - `LICENSE` file and matching `pyproject.toml` license metadata.
 - GitHub Actions CI for Python tests, JavaScript syntax checks, and design lint.
 - `CHANGELOG.md` and GitHub release-note configuration.
+- GitHub Release automation plus the published `v0.1.0` release.
+- `main` branch is available for default-branch based installs and updates.
 
 Still optional/future:
 
-- Release tag/GitHub Release after merge to the default branch.
 - Packaged install path/entry point if you want `pipx install` or `uv tool`
   usage instead of clone-and-run.
 

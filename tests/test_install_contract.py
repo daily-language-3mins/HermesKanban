@@ -116,10 +116,11 @@ def test_readme_separates_hermes_core_and_webui_features_with_screenshots():
     readme = read("README.md")
 
     for phrase in [
-        "Hermes Agent 기본 기능",
-        "KanbanWebUI 추가 기능",
+        "Hermes Agent core",
+        "KanbanWebUI additions",
         "docs/assets/screenshots/kanban-board-overview.png",
         "docs/assets/screenshots/ai-workflow-designer.png",
+        "In-app self-update",
     ]:
         assert phrase in readme
 

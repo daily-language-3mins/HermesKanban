@@ -249,7 +249,7 @@ def test_workflow_static_contract():
     assert 'populateWorkflowTemplateSelect' not in app
     assert 'workflow-chip' in board
     assert 'workflowDetailSection' in drawer
-    for key in ['workflowCreate', 'workflowPrompt', 'workflowPlannerProfile', 'workflowAttachments', 'workflowRevise', 'workflowApply', 'workflowDraftStatus', 'workflowNotApplyable', 'workflowSteps']:
+    for key in ['workflowCreate', 'workflowDesignerHint', 'workflowPrompt', 'workflowPlannerProfile', 'workflowAttachments', 'workflowRevise', 'workflowApply', 'workflowDraftStatus', 'workflowNotApplyable', 'workflowSteps']:
         assert key in i18n
     for css_class in ['.workflow-step-list', '.workflow-step', '.workflow-chip', '.workflow-meta', '.workflow-draft-actions', '.workflow-attachment-list']:
         assert css_class in style
