@@ -1,8 +1,11 @@
-import { state } from './state.js?v=20260506-05';
+import { api } from './api.js?v=20260507-01';
+import { t } from './i18n.js?v=20260507-01';
+import { state, toast } from './state.js?v=20260507-01';
 
 const VIEW_MODES = new Set(['focus', 'all', 'blocked', 'off']);
 let currentData = null;
 let hoverTaskId = null;
+let linkDraft = null;
 let raf = 0;
 
 function validMode(value) {
@@ -138,14 +141,170 @@ function cardPoint(board, card, side, offset = 0) {
 }
 
 function pathFor(board, parentCard, childCard, ports = { sourceOffset: 0, targetOffset: 0 }) {
-  const parentRect = parentCard.getBoundingClientRect();
-  const childRect = childCard.getBoundingClientRect();
-  const forward = parentRect.left <= childRect.left;
-  const from = cardPoint(board, parentCard, forward ? 'right' : 'left', ports.sourceOffset);
-  const to = cardPoint(board, childCard, forward ? 'left' : 'right', ports.targetOffset);
+  const from = cardPoint(board, parentCard, 'right', ports.sourceOffset);
+  const to = cardPoint(board, childCard, 'left', ports.targetOffset);
   const dx = Math.max(54, Math.abs(to.x - from.x) * 0.42);
-  const curve = forward ? dx : -dx;
-  return `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} C ${(from.x + curve).toFixed(1)} ${from.y.toFixed(1)}, ${(to.x - curve).toFixed(1)} ${to.y.toFixed(1)}, ${to.x.toFixed(1)} ${to.y.toFixed(1)}`;
+  return `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} C ${(from.x + dx).toFixed(1)} ${from.y.toFixed(1)}, ${(to.x - dx).toFixed(1)} ${to.y.toFixed(1)}, ${to.x.toFixed(1)} ${to.y.toFixed(1)}`;
+}
+
+function portFromElement(el) {
+  const port = el?.closest?.('.dependency-port[data-link-role][data-link-task-id]');
+  if (!port) return null;
+  const role = port.dataset.linkRole;
+  if (!['parent', 'child'].includes(role)) return null;
+  return { el: port, role, taskId: port.dataset.linkTaskId };
+}
+
+function portFromPoint(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY);
+  return portFromElement(el);
+}
+
+function compatiblePorts(source, target) {
+  return Boolean(source && target && source.el !== target.el && source.taskId !== target.taskId && source.role !== target.role);
+}
+
+function relationFromPorts(source, target) {
+  if (!compatiblePorts(source, target)) return null;
+  return {
+    parent_id: source.role === 'parent' ? source.taskId : target.taskId,
+    child_id: source.role === 'child' ? source.taskId : target.taskId,
+  };
+}
+
+function pointForPort(board, port) {
+  if (!port) return null;
+  const card = port.el.closest('.task-card[data-task-id]') || visibleCards(board).get(port.taskId);
+  if (!card) return null;
+  return cardPoint(board, card, port.role === 'parent' ? 'right' : 'left');
+}
+
+function clientPoint(board, clientX, clientY) {
+  const boardRect = board.getBoundingClientRect();
+  return {
+    x: clientX - boardRect.left + board.scrollLeft,
+    y: clientY - boardRect.top + board.scrollTop,
+  };
+}
+
+function previewPathFor(board, start, end) {
+  const dx = Math.max(54, Math.abs(end.x - start.x) * 0.42);
+  const direction = end.x >= start.x ? 1 : -1;
+  return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} C ${(start.x + direction * dx).toFixed(1)} ${start.y.toFixed(1)}, ${(end.x - direction * dx).toFixed(1)} ${end.y.toFixed(1)}, ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+}
+
+function dependencyPreviewPath(board) {
+  if (!linkDraft) return '';
+  const start = pointForPort(board, linkDraft.source);
+  const targetPoint = linkDraft.target ? pointForPort(board, linkDraft.target) : null;
+  const end = targetPoint || clientPoint(board, linkDraft.x, linkDraft.y);
+  if (!start || !end) return '';
+  const classes = ['dependency-preview-edge'];
+  if (linkDraft.target) classes.push(compatiblePorts(linkDraft.source, linkDraft.target) ? 'is-valid' : 'is-invalid');
+  return `<path class="${classes.join(' ')}" d="${previewPathFor(board, start, end)}" />`;
+}
+
+function clearPortClasses(board) {
+  if (!board) return;
+  board.classList.remove('is-linking');
+  board.querySelectorAll('.dependency-port').forEach(port => {
+    port.classList.remove('is-link-source', 'is-link-target', 'is-link-compatible');
+  });
+}
+
+function updatePortTargets(board, source, target) {
+  board.querySelectorAll('.dependency-port').forEach(port => {
+    const item = portFromElement(port);
+    port.classList.toggle('is-link-source', item?.el === source?.el);
+    port.classList.toggle('is-link-target', item?.el === target?.el);
+    port.classList.toggle('is-link-compatible', compatiblePorts(source, item));
+  });
+}
+
+function cleanupBlueprintLinking() {
+  document.removeEventListener('pointermove', handleBlueprintPointerMove);
+  document.removeEventListener('pointerup', handleBlueprintPointerUp);
+  document.removeEventListener('keydown', handleBlueprintKeydown);
+  clearPortClasses(boardEl());
+  linkDraft = null;
+  scheduleDraw();
+}
+
+function startBlueprintLink(ev, portEl) {
+  const source = portFromElement(portEl);
+  if (!source) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (linkDraft) cleanupBlueprintLinking();
+  linkDraft = { source, pointerId: ev.pointerId, x: ev.clientX, y: ev.clientY, target: null };
+  const board = boardEl();
+  if (board) {
+    board.classList.add('is-linking');
+    updatePortTargets(board, source, null);
+  }
+  hoverTaskId = source.taskId;
+  document.addEventListener('pointermove', handleBlueprintPointerMove, { passive: false });
+  document.addEventListener('pointerup', handleBlueprintPointerUp);
+  document.addEventListener('keydown', handleBlueprintKeydown);
+  scheduleDraw();
+}
+
+function handleBlueprintPointerMove(ev) {
+  if (!linkDraft || (ev.pointerId !== undefined && linkDraft.pointerId !== undefined && ev.pointerId !== linkDraft.pointerId)) return;
+  ev.preventDefault();
+  linkDraft.x = ev.clientX;
+  linkDraft.y = ev.clientY;
+  linkDraft.target = portFromPoint(ev.clientX, ev.clientY);
+  const board = boardEl();
+  if (board) updatePortTargets(board, linkDraft.source, linkDraft.target);
+  scheduleDraw();
+}
+
+async function handleBlueprintPointerUp(ev) {
+  if (!linkDraft || (ev.pointerId !== undefined && linkDraft.pointerId !== undefined && ev.pointerId !== linkDraft.pointerId)) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const source = linkDraft.source;
+  const target = portFromPoint(ev.clientX, ev.clientY) || linkDraft.target;
+  const sameTask = Boolean(target && source.taskId === target.taskId);
+  const relation = relationFromPorts(source, target);
+  cleanupBlueprintLinking();
+  if (!target) return;
+  if (!relation) {
+    toast(sameTask ? t('linkSameTaskToast') : t('linkInvalidToast'), 'error');
+    return;
+  }
+  try {
+    await api.linkTask(state.board, relation);
+    toast(`${t('linkCreatedToast')} ${relation.parent_id} → ${relation.child_id}`);
+    document.dispatchEvent(new CustomEvent('kanban:refresh'));
+  } catch (err) {
+    toast(err.message || String(err), 'error');
+  }
+}
+
+function handleBlueprintKeydown(ev) {
+  if (ev.key !== 'Escape') return;
+  ev.preventDefault();
+  cleanupBlueprintLinking();
+}
+
+export function setupBlueprintLinking(board) {
+  if (!board || board.dataset.blueprintLinking === 'true') return;
+  board.dataset.blueprintLinking = 'true';
+  board.addEventListener('pointerdown', ev => {
+    const port = ev.target.closest?.('.dependency-port[data-link-role][data-link-task-id]');
+    if (!port) return;
+    startBlueprintLink(ev, port);
+  }, true);
+  board.addEventListener('click', ev => {
+    if (!ev.target.closest?.('.dependency-port')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }, true);
+  board.addEventListener('dragstart', ev => {
+    if (ev.target.closest?.('.dependency-port')) ev.preventDefault();
+  }, true);
 }
 
 function resetCardClasses(board) {
@@ -186,6 +345,10 @@ function markCards(board, edges, tasks, id) {
   }
 }
 
+function markerDefs() {
+  return '<defs><marker id="dependency-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>';
+}
+
 function draw() {
   raf = 0;
   const board = boardEl();
@@ -202,8 +365,14 @@ function draw() {
   svg.setAttribute('width', String(board.scrollWidth));
   svg.setAttribute('height', String(board.scrollHeight));
   svg.setAttribute('viewBox', `0 0 ${board.scrollWidth} ${board.scrollHeight}`);
-  if (currentMode === 'off' || !edges.length) {
+
+  const preview = dependencyPreviewPath(board);
+  if ((currentMode === 'off' || !edges.length) && !preview) {
     svg.innerHTML = '';
+    return;
+  }
+  if (currentMode === 'off' || !edges.length) {
+    svg.innerHTML = `${markerDefs()}${preview}`;
     return;
   }
 
@@ -224,7 +393,7 @@ function draw() {
     return `<path class="${classes.join(' ')}" d="${pathFor(board, parent, child, edgePorts)}" data-parent-id="${edge.parent_id}" data-child-id="${edge.child_id}" data-source-offset="${edgePorts.sourceOffset.toFixed(1)}" data-target-offset="${edgePorts.targetOffset.toFixed(1)}" />`;
   }).join('');
 
-  svg.innerHTML = `<defs><marker id="dependency-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${paths}`;
+  svg.innerHTML = `${markerDefs()}${paths}${preview}`;
 }
 
 function scheduleDraw() {
@@ -236,6 +405,7 @@ function attachBoardListeners(board) {
   if (board.dataset.dependencyListeners === 'true') return;
   board.dataset.dependencyListeners = 'true';
   board.addEventListener('scroll', scheduleDraw, { passive: true });
+  setupBlueprintLinking(board);
 }
 
 export function setupDependencyControls() {

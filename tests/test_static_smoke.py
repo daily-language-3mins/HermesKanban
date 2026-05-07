@@ -40,9 +40,9 @@ def test_dark_mode_static_contract():
 
     assert 'id="themeToggle"' in index
     assert 'aria-pressed="false"' in index
-    assert 'style.css?v=20260506-05' in index
-    assert 'app.js?v=20260506-05' in index
-    assert './theme.js?v=20260506-05' in app
+    assert 'style.css?v=20260507-01' in index
+    assert 'app.js?v=20260507-01' in index
+    assert './theme.js?v=20260507-01' in app
     assert 'setupThemeToggle' in app
     assert 'updateThemeToggleLabel' in app
     assert 'kanbanTheme' in theme
@@ -267,3 +267,44 @@ def test_dependency_edges_fan_out_shared_endpoints():
         'data-target-offset',
     ]:
         assert phrase in lines
+
+
+def test_blueprint_dependency_ports_create_links_from_board():
+    root = Path(__file__).resolve().parents[1]
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    lines = (root / 'static' / 'dependency-lines.js').read_text(encoding='utf-8')
+    dragdrop = (root / 'static' / 'dragdrop.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+
+    for phrase in [
+        'class="dependency-port child-port"',
+        'class="dependency-port parent-port"',
+        'data-link-role="child"',
+        'data-link-role="parent"',
+        'data-link-task-id',
+    ]:
+        assert phrase in board
+
+    for phrase in [
+        "import { api }",
+        'setupBlueprintLinking',
+        'pointerdown',
+        'pointermove',
+        'pointerup',
+        'document.elementFromPoint',
+        'relationFromPorts',
+        'api.linkTask(state.board',
+        'dependency-preview-edge',
+        "cardPoint(board, parentCard, 'right'",
+        "cardPoint(board, childCard, 'left'",
+    ]:
+        assert phrase in lines
+
+    assert "ev.target.closest('.dependency-port')" in dragdrop
+    assert '.dependency-port.child-port { left:' in style
+    assert '.dependency-port.parent-port { right:' in style
+    assert '.board.is-linking' in style
+    assert '.dependency-preview-edge' in style
+    for key in ['parentPortHint', 'childPortHint', 'linkCreatedToast', 'linkInvalidToast']:
+        assert key in i18n

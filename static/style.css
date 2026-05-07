@@ -54,6 +54,16 @@ textarea { width: 100%; resize: vertical; }
 .task-card:hover, .task-card:focus { transform: translateY(-2px); box-shadow: var(--card-hover-shadow); outline: none; }
 .task-card.drag-ghost { opacity: .45; }
 .task-card.pointer-drag-ready { outline: 2px solid var(--link); }
+.dependency-port { position: absolute; top: 50%; z-index: 3; width: 22px; height: 22px; transform: translateY(-50%); display: grid; place-items: center; border: 2px solid var(--primary); border-radius: 999px; background: var(--surface-strong); color: var(--ink); cursor: crosshair; box-shadow: 0 8px 20px rgba(23,23,23,.16); transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background-color .14s ease; }
+.dependency-port.child-port { left: -11px; border-color: #16a34a; }
+.dependency-port.parent-port { right: -11px; border-color: #2563eb; }
+.dependency-port span { position: absolute; top: -26px; min-width: max-content; opacity: 0; pointer-events: none; border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 7px; background: var(--surface-strong); color: var(--ink); font-size: 11px; font-weight: 800; box-shadow: 0 8px 18px rgba(23,23,23,.12); }
+.task-card:hover .dependency-port span, .dependency-port:focus-visible span, .dependency-port.is-link-source span, .dependency-port.is-link-target span { opacity: 1; }
+.dependency-port:hover, .dependency-port:focus-visible, .dependency-port.is-link-source, .dependency-port.is-link-target { transform: translateY(-50%) scale(1.15); outline: none; box-shadow: 0 0 0 5px rgba(13,116,206,.12), 0 12px 26px rgba(23,23,23,.20); }
+.dependency-port.is-link-compatible { box-shadow: 0 0 0 5px rgba(13,116,206,.10), 0 8px 20px rgba(23,23,23,.16); }
+.dependency-port.is-link-target { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.board.is-linking .task-card { cursor: crosshair; }
+.board.is-linking .dependency-port:not(.is-link-compatible):not(.is-link-source) { opacity: .42; }
 .task-card.running { background: var(--running); }
 .task-card.blocked { background: var(--blocked); }
 .task-card.done { background: var(--done); }
@@ -74,6 +84,9 @@ textarea { width: 100%; resize: vertical; }
 .dependency-edge.is-blocked { stroke: var(--warning); stroke-dasharray: 7 4; }
 .dependency-edge.is-done { stroke: var(--edge-done); stroke-dasharray: 4 5; }
 .dependency-edge.is-muted { opacity: .14; }
+.dependency-preview-edge { fill: none; stroke: var(--primary); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 7 5; opacity: .82; pointer-events: none; }
+.dependency-preview-edge.is-valid { stroke: var(--success); opacity: 1; }
+.dependency-preview-edge.is-invalid { stroke: var(--danger); opacity: .74; }
 .task-card.dependency-focus { border-color: var(--primary); box-shadow: 0 14px 36px rgba(23,23,23,.16); }
 .task-card.dependency-parent { border-color: rgba(37,99,235,.72); box-shadow: 0 10px 30px rgba(37,99,235,.16); }
 .task-card.dependency-child { border-color: rgba(22,163,74,.72); box-shadow: 0 10px 30px rgba(22,163,74,.16); }

@@ -1,5 +1,5 @@
-import { api } from './api.js?v=20260506-05';
-import { state, toast } from './state.js?v=20260506-05';
+import { api } from './api.js?v=20260507-01';
+import { state, toast } from './state.js?v=20260507-01';
 
 let draggedId = null;
 
@@ -7,6 +7,10 @@ export function attachDragHandlers(root) {
   root.querySelectorAll('.task-card').forEach(card => {
     card.draggable = true;
     card.addEventListener('dragstart', ev => {
+      if (ev.target.closest('.dependency-port')) {
+        ev.preventDefault();
+        return;
+      }
       draggedId = card.dataset.taskId;
       ev.dataTransfer.effectAllowed = 'move';
       ev.dataTransfer.setData('text/plain', draggedId);
