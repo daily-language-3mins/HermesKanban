@@ -1,5 +1,5 @@
-import { api } from './api.js?v=20260506-03';
-import { state, toast } from './state.js?v=20260506-03';
+import { api } from './api.js?v=20260506-05';
+import { state, toast } from './state.js?v=20260506-05';
 
 export function setupMobileFallback() {
   document.addEventListener('contextmenu', async ev => {

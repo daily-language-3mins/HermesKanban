@@ -1,8 +1,8 @@
-import { t } from './i18n.js?v=20260506-03';
-import { escapeHtml } from './markdown.js?v=20260506-03';
-import { openTaskDrawer } from './drawer.js?v=20260506-03';
-import { attachDragHandlers } from './dragdrop.js?v=20260506-03';
-import { clearDependencyFocus, focusDependencyTask, renderDependencyOverlay, selectDependencyTask } from './dependency-lines.js?v=20260506-03';
+import { t } from './i18n.js?v=20260506-05';
+import { escapeHtml } from './markdown.js?v=20260506-05';
+import { openTaskDrawer } from './drawer.js?v=20260506-05';
+import { attachDragHandlers } from './dragdrop.js?v=20260506-05';
+import { clearDependencyFocus, focusDependencyTask, renderDependencyOverlay, selectDependencyTask } from './dependency-lines.js?v=20260506-05';
 
 function card(task) {
   const chips = [task.assignee ? `@${task.assignee}` : 'unassigned', task.tenant, task.priority ? `P${task.priority}` : null].filter(Boolean);
@@ -24,7 +24,9 @@ function card(task) {
 export function renderKpis(data) {
   const root = document.getElementById('kpiRow');
   const stats = data.stats?.by_status || {};
-  root.innerHTML = data.column_order.map(status => `<div class="kpi"><small>${t(status)}</small><strong>${stats[status] || 0}</strong></div>`).join('');
+  const statuses = data.column_order || [];
+  root.style.setProperty('--kpi-column-count', String(Math.max(1, statuses.length)));
+  root.innerHTML = statuses.map(status => `<div class="kpi"><small>${t(status)}</small><strong>${stats[status] || 0}</strong></div>`).join('');
 }
 
 export function renderBoard(data) {
@@ -52,8 +54,7 @@ export function renderBoard(data) {
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });
   });
   root.querySelectorAll('.mini-add').forEach(btn => btn.addEventListener('click', () => {
-    document.getElementById('quickStatus').value = btn.dataset.status;
-    document.getElementById('quickTitle').focus();
+    document.dispatchEvent(new CustomEvent('kanban:open-task-create', { detail: { status: btn.dataset.status } }));
   }));
   attachDragHandlers(root);
   renderDependencyOverlay(data);

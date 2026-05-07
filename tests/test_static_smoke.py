@@ -12,7 +12,7 @@ def test_static_shell_contains_required_ui_contracts(client):
     assert 'Hermes KanbanWebUI' in index
     assert 'langToggle' in index
     assert 'boardSelect' in index
-    assert 'quickCreateForm' in index
+    assert 'taskCreateBtn' in index
     assert '/static/app.js' in index
 
     root = Path(__file__).resolve().parents[1]
@@ -40,9 +40,9 @@ def test_dark_mode_static_contract():
 
     assert 'id="themeToggle"' in index
     assert 'aria-pressed="false"' in index
-    assert 'style.css?v=20260506-03' in index
-    assert 'app.js?v=20260506-03' in index
-    assert './theme.js?v=20260506-03' in app
+    assert 'style.css?v=20260506-05' in index
+    assert 'app.js?v=20260506-05' in index
+    assert './theme.js?v=20260506-05' in app
     assert 'setupThemeToggle' in app
     assert 'updateThemeToggleLabel' in app
     assert 'kanbanTheme' in theme
@@ -132,6 +132,41 @@ def test_dependency_visual_options_and_focus_overlay_contract():
     assert 'dependencyMiniMap' in drawer
 
 
+def test_task_create_options_live_in_modal_not_toolbar():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    forms = (root / 'static' / 'forms.js').read_text(encoding='utf-8')
+    app = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    for phrase in [
+        'id="taskCreateBtn"',
+        'id="taskDialog"',
+        'id="taskCreateForm"',
+        'id="taskTitle"',
+        'id="taskBody"',
+        'id="taskAssignee"',
+        'id="taskStatus"',
+    ]:
+        assert phrase in index
+
+    for removed in ['id="quickCreateForm"', 'id="quickTitle"', 'id="quickAssignee"', 'id="quickStatus"']:
+        assert removed not in index
+
+    assert 'setupTaskCreateDialog' in forms
+    assert "document.getElementById('taskCreateBtn')" in forms
+    assert "document.dispatchEvent(new CustomEvent('kanban:open-task-create'" in board
+    assert "kanban:open-task-create" in forms
+    assert "document.getElementById('taskCreateBtn').click()" in app
+    for key in ['taskCreate', 'taskCreateHint', 'taskTitlePlaceholder', 'taskBodyPlaceholder']:
+        assert key in i18n
+    for css_class in ['.toolbar-actions', '.task-field-grid', '.task-modal']:
+        assert css_class in style
+
+
+
 def test_workflow_static_contract():
     root = Path(__file__).resolve().parents[1]
     index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
@@ -192,6 +227,20 @@ def test_board_columns_fill_available_resolution_width():
     assert 'width: var(--column-width)' not in style
     assert 'min-width: var(--column-width)' not in style
     assert '.board-column { position: relative; min-width: 0;' in style
+
+
+def test_kpi_row_uses_dynamic_status_count_when_archived_is_visible():
+    root = Path(__file__).resolve().parents[1]
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    render_kpis = board.split('export function renderKpis(data) {', 1)[1].split('export function renderBoard(data) {', 1)[0]
+
+    assert '--kpi-column-count' in render_kpis
+    assert "root.style.setProperty('--kpi-column-count'" in render_kpis
+    assert 'grid-template-columns: repeat(var(--kpi-column-count, 6), minmax(120px, 1fr));' in style
+    assert 'overflow-x: auto;' in style
+    assert '.kpi-row { grid-template-columns: repeat(3, 1fr); }' not in style
+    assert '.kpi-row { grid-template-columns: repeat(2, 1fr); }' not in style
 
 
 def test_dependency_lines_render_above_column_backgrounds_below_cards():

@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/design-tokens.css?v=20260506-03" />
-  <link rel="stylesheet" href="/static/style.css?v=20260506-03" />
+  <link rel="stylesheet" href="/static/design-tokens.css?v=20260506-05" />
+  <link rel="stylesheet" href="/static/style.css?v=20260506-05" />
 </head>
 <body>
   <div class="app-shell">
@@ -46,16 +46,6 @@
       </section>
 
       <section class="toolbar" aria-label="filters">
-        <form id="quickCreateForm" class="quick-create">
-          <input id="quickTitle" name="title" autocomplete="off" data-i18n-placeholder="quickTitle" placeholder="작업 제목을 입력하고 Enter" />
-          <select id="quickAssignee" name="assignee" aria-label="agent profile"></select>
-          <select id="quickStatus" name="status">
-            <option value="ready">ready</option>
-            <option value="todo">todo</option>
-            <option value="triage">triage</option>
-          </select>
-          <button class="button primary" data-i18n="create">추가</button>
-        </form>
         <div class="filters">
           <input id="searchInput" data-i18n-placeholder="search" placeholder="검색" />
           <select id="assigneeFilter"><option value="" data-i18n="allAssignees">전체 담당자</option></select>
@@ -66,8 +56,11 @@
             <option value="off" data-i18n="dependencyViewOff">관계선: 숨김</option>
           </select>
           <label class="check"><input id="archivedToggle" type="checkbox" /> <span data-i18n="showArchived">보관함 표시</span></label>
+        </div>
+        <div class="toolbar-actions">
+          <button class="button primary" id="taskCreateBtn" type="button" data-i18n="taskCreate">Task 추가</button>
           <button class="button ghost" id="workflowBtn" type="button" data-i18n="workflowCreate">Workflow 생성</button>
-          <button class="button ghost" id="bulkBtn" data-i18n="bulkCreate">일괄 추가</button>
+          <button class="button ghost" id="bulkBtn" type="button" data-i18n="bulkCreate">일괄 추가</button>
         </div>
       </section>
 
@@ -79,6 +72,27 @@
   <aside id="drawer" class="drawer" aria-hidden="true"></aside>
   <div id="overlay" class="overlay" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="taskDialog" class="modal task-modal">
+    <form id="taskCreateForm" method="dialog">
+      <h3 data-i18n="taskCreate">Task 추가</h3>
+      <p class="muted" data-i18n="taskCreateHint">필요할 때만 제목, 설명, 담당 프로필, 상태를 입력해 새 task를 생성합니다.</p>
+      <label class="dialog-label"><span data-i18n="title">제목</span><input id="taskTitle" name="title" autocomplete="off" data-i18n-placeholder="taskTitlePlaceholder" placeholder="작업 제목" required /></label>
+      <label class="dialog-label"><span data-i18n="body">본문</span><textarea id="taskBody" name="body" rows="4" data-i18n-placeholder="taskBodyPlaceholder" placeholder="작업 설명/지시사항"></textarea></label>
+      <div class="task-field-grid">
+        <label class="dialog-label"><span data-i18n="assignee">담당 프로필</span><select id="taskAssignee" name="assignee" aria-label="agent profile"></select></label>
+        <label class="dialog-label"><span data-i18n="status">상태</span><select id="taskStatus" name="status">
+          <option value="ready">ready</option>
+          <option value="todo">todo</option>
+          <option value="triage">triage</option>
+        </select></label>
+      </div>
+      <div class="modal-actions">
+        <button class="button ghost" type="button" data-task-cancel data-i18n="cancel">취소</button>
+        <button class="button primary" value="default" data-i18n="create">추가</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="boardDialog" class="modal">
     <form id="boardForm" method="dialog">
@@ -129,6 +143,6 @@ Task two"></textarea>
     </form>
   </dialog>
 
-  <script type="module" src="/static/app.js?v=20260506-03"></script>
+  <script type="module" src="/static/app.js?v=20260506-05"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
-import { api } from './api.js?v=20260506-03';
-import { escapeHtml } from './markdown.js?v=20260506-03';
-import { t } from './i18n.js?v=20260506-03';
-import { state, toast, setBoard } from './state.js?v=20260506-03';
+import { api } from './api.js?v=20260506-05';
+import { escapeHtml } from './markdown.js?v=20260506-05';
+import { t } from './i18n.js?v=20260506-05';
+import { state, toast, setBoard } from './state.js?v=20260506-05';
 
 function stepKey(step) {
   return step.step_key || step.key || '';
@@ -177,20 +177,53 @@ export function setupWorkflowDialog(load) {
   });
 }
 
-export function setupForms(load) {
-  document.getElementById('quickCreateForm').addEventListener('submit', async ev => {
+function openTaskCreateDialog(dialog, form, status = 'ready') {
+  if (dialog.open) {
+    requestAnimationFrame(() => form.querySelector('#taskTitle')?.focus());
+    return;
+  }
+  form.reset();
+  const taskStatus = form.querySelector('#taskStatus');
+  const taskAssignee = form.querySelector('#taskAssignee');
+  if (taskStatus) taskStatus.value = status || 'ready';
+  if (taskAssignee) taskAssignee.value = localStorage.getItem('lastAssignee') || '';
+  dialog.showModal();
+  requestAnimationFrame(() => form.querySelector('#taskTitle')?.focus());
+}
+
+export function setupTaskCreateDialog(load) {
+  const taskDialog = document.getElementById('taskDialog');
+  const taskForm = document.getElementById('taskCreateForm');
+  const taskButton = document.getElementById('taskCreateBtn');
+  if (!taskDialog || !taskForm || !taskButton) return;
+
+  taskButton.addEventListener('click', () => openTaskCreateDialog(taskDialog, taskForm, 'ready'));
+  document.addEventListener('kanban:open-task-create', ev => {
+    openTaskCreateDialog(taskDialog, taskForm, ev.detail?.status || 'ready');
+  });
+  taskForm.querySelector('[data-task-cancel]').addEventListener('click', () => taskDialog.close());
+  taskForm.addEventListener('submit', async ev => {
     ev.preventDefault();
     const form = new FormData(ev.currentTarget);
     const title = String(form.get('title') || '').trim();
     if (!title) return;
-    const payload = { title, assignee: form.get('assignee') || null, status: form.get('status') || 'ready' };
+    const body = String(form.get('body') || '').trim();
+    const payload = {
+      title,
+      body: body || null,
+      assignee: form.get('assignee') || null,
+      status: form.get('status') || 'ready'
+    };
     localStorage.setItem('lastAssignee', payload.assignee || '');
     await api.createTask(state.board, payload);
-    ev.currentTarget.reset();
-    document.getElementById('quickAssignee').value = localStorage.getItem('lastAssignee') || '';
-    toast('created');
+    taskDialog.close();
+    toast(t('createdToast'));
     await load();
   });
+}
+
+export function setupForms(load) {
+  setupTaskCreateDialog(load);
 
   const boardDialog = document.getElementById('boardDialog');
   document.getElementById('newBoardBtn').addEventListener('click', () => boardDialog.showModal());

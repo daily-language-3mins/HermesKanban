@@ -1,12 +1,12 @@
-import { api } from './api.js?v=20260506-03';
-import { applyI18n, lang, setLang, t } from './i18n.js?v=20260506-03';
-import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260506-03';
-import { renderBoard, renderKpis } from './board.js?v=20260506-03';
-import { setupDependencyControls } from './dependency-lines.js?v=20260506-03';
-import { setupForms } from './forms.js?v=20260506-03';
-import { setupMobileFallback } from './mobile.js?v=20260506-03';
-import { closeDrawer } from './drawer.js?v=20260506-03';
-import { state, setBoard, toast } from './state.js?v=20260506-03';
+import { api } from './api.js?v=20260506-05';
+import { applyI18n, lang, setLang, t } from './i18n.js?v=20260506-05';
+import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260506-05';
+import { renderBoard, renderKpis } from './board.js?v=20260506-05';
+import { setupDependencyControls } from './dependency-lines.js?v=20260506-05';
+import { setupForms } from './forms.js?v=20260506-05';
+import { setupMobileFallback } from './mobile.js?v=20260506-05';
+import { closeDrawer } from './drawer.js?v=20260506-05';
+import { state, setBoard, toast } from './state.js?v=20260506-05';
 
 async function loadBoards() {
   const data = await api.boards();
@@ -52,12 +52,12 @@ function renderAssigneeControls(data) {
   const assignees = Array.isArray(data.assignees) ? data.assignees : [];
   const profileAssignees = assignees.filter(item => item && item.on_disk);
 
-  const quick = document.getElementById('quickAssignee');
-  const previousQuick = quick.value || localStorage.getItem('lastAssignee') || '';
-  quick.replaceChildren();
-  appendOption(quick, '', t('unassigned'));
-  for (const assignee of profileAssignees) appendOption(quick, assignee.name, assigneeOptionLabel(assignee));
-  quick.value = profileAssignees.some(item => item.name === previousQuick) ? previousQuick : '';
+  const taskAssignee = document.getElementById('taskAssignee');
+  const previousTaskAssignee = taskAssignee.value || localStorage.getItem('lastAssignee') || '';
+  taskAssignee.replaceChildren();
+  appendOption(taskAssignee, '', t('unassigned'));
+  for (const assignee of profileAssignees) appendOption(taskAssignee, assignee.name, assigneeOptionLabel(assignee));
+  taskAssignee.value = profileAssignees.some(item => item.name === previousTaskAssignee) ? previousTaskAssignee : '';
 
   const filter = document.getElementById('assigneeFilter');
   const previousFilter = state.assignee || filter.value || '';
@@ -107,8 +107,10 @@ function setupControls() {
   document.addEventListener('kanban:refresh', load);
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape') closeDrawer();
-    if (ev.key === '/') { ev.preventDefault(); document.getElementById('searchInput').focus(); }
-    if (ev.key.toLowerCase() === 'n') document.getElementById('quickTitle').focus();
+    const tagName = ev.target?.tagName?.toLowerCase();
+    const isTyping = ['input', 'select', 'textarea'].includes(tagName) || ev.target?.isContentEditable;
+    if (!isTyping && ev.key === '/') { ev.preventDefault(); document.getElementById('searchInput').focus(); }
+    if (!isTyping && ev.key.toLowerCase() === 'n') document.getElementById('taskCreateBtn').click();
   });
 }
 
@@ -130,7 +132,9 @@ async function main() {
   setupDependencyControls();
   setupForms(load);
   setupMobileFallback();
-  document.getElementById('quickAssignee').value = localStorage.getItem('lastAssignee') || '';
+  const storedAssignee = localStorage.getItem('lastAssignee') || '';
+  const taskAssignee = document.getElementById('taskAssignee');
+  if (taskAssignee) taskAssignee.value = storedAssignee;
   try {
     await load();
     pollEvents();

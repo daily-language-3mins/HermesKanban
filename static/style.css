@@ -14,7 +14,7 @@ button, input, select, textarea { font: inherit; }
 h1, h2, h3, p { margin: 0; }
 h1 { font-size: 20px; letter-spacing: -0.03em; }
 .brand p, .muted { color: var(--muted); }
-.top-actions, .filters, .quick-create { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.top-actions, .filters, .toolbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .button { border: 1px solid var(--border); background: var(--surface-strong); color: var(--ink); padding: 10px 14px; border-radius: 999px; cursor: pointer; font-weight: 700; transition: background-color .16s ease, border-color .16s ease, color .16s ease; }
 .button.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .button.primary:hover, .button:not(.primary):not(.ghost):hover { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
@@ -32,12 +32,13 @@ textarea { width: 100%; resize: vertical; }
 .health-panel small { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-family: var(--font-mono); }
 .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 6px rgba(182,92,0,.12); }
 .dot.ok { background: var(--success); box-shadow: 0 0 0 6px rgba(10,127,66,.12); }
-.toolbar { margin-top: 16px; border-radius: var(--radius-lg); padding: 14px; display: flex; justify-content: space-between; gap: 12px; }
-.quick-create { flex: 1; }
-.quick-create input[name=title], #quickTitle { min-width: 280px; flex: 1; }
+.toolbar { margin-top: 16px; border-radius: var(--radius-lg); padding: 14px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.filters { flex: 1; min-width: 0; }
+.filters #searchInput { min-width: min(360px, 100%); flex: 1; }
+.toolbar-actions { justify-content: flex-end; }
 .check { color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.kpi-row { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 12px; margin: 16px 0; }
-.kpi { border-radius: var(--radius-md); padding: 15px; }
+.kpi-row { display: grid; grid-template-columns: repeat(var(--kpi-column-count, 6), minmax(120px, 1fr)); gap: 12px; margin: 16px 0; overflow-x: auto; }
+.kpi { border-radius: var(--radius-md); padding: 15px; min-width: 0; }
 .kpi small { color: var(--muted); display: block; margin-bottom: 8px; }
 .kpi strong { font-size: 28px; letter-spacing: -0.05em; }
 .board { position: relative; display: grid; grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(var(--column-min-width), 1fr)); gap: 14px; overflow-x: auto; min-height: calc(100vh - 310px); padding-bottom: 16px; scroll-snap-type: x proximity; }
@@ -134,6 +135,8 @@ textarea { width: 100%; resize: vertical; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-label { display: grid; gap: 6px; color: var(--muted); font-weight: 700; }
 .dialog-label input, .dialog-label select, .dialog-label textarea { width: 100%; }
+.task-modal { width: min(620px, 94vw); }
+.task-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .workflow-modal { width: min(860px, 94vw); }
 .workflow-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .workflow-draft-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -156,14 +159,12 @@ textarea { width: 100%; resize: vertical; }
 .workflow-detail .workflow-meta { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); color: var(--ink); font-size: 14px; }
 @media (max-width: 900px) {
   .topbar, .hero-card, .toolbar { align-items: stretch; flex-direction: column; }
-  .kpi-row { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 760px) {
   .app-shell { padding: 12px; }
   .board { min-height: 58vh; scroll-snap-type: x mandatory; grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(calc(100vw - 42px), 1fr)); }
-  .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .drawer { width: 100vw; border-radius: 24px 24px 0 0; top: 8vh; height: 92vh; }
-  .inline-form, .dependency-grid, .detail-grid, .dependency-mini-map, .workflow-field-grid { grid-template-columns: 1fr; }
+  .inline-form, .dependency-grid, .detail-grid, .dependency-mini-map, .task-field-grid, .workflow-field-grid { grid-template-columns: 1fr; }
   .dependency-mini-current { grid-template-columns: 1fr; gap: 8px; }
   .dependency-mini-current > span { display: none; }
   .monitor-grid { grid-template-columns: repeat(2, 1fr); }
