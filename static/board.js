@@ -41,8 +41,21 @@ export function renderKpis(data) {
 
 export function renderBoard(data) {
   const root = document.getElementById('board');
+  const columnNav = document.getElementById('columnNav');
   const statuses = data.column_order || [];
   root.style.setProperty('--kanban-column-count', String(Math.max(1, statuses.length)));
+  if (columnNav) {
+    columnNav.innerHTML = statuses.map((status, idx) => {
+      const count = (data.columns[status] || []).length;
+      return `<button type="button" class="column-nav-button${idx === 0 ? ' active' : ''}" data-column-target="${status}" aria-current="${idx === 0 ? 'true' : 'false'}"><span>${t(status)}</span><strong>${count}</strong></button>`;
+    }).join('');
+    columnNav.querySelectorAll('[data-column-target]').forEach(button => {
+      button.addEventListener('click', () => {
+        const target = [...root.querySelectorAll('.board-column')].find(column => column.dataset.status === button.dataset.columnTarget);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+      });
+    });
+  }
   root.innerHTML = statuses.map(status => {
     const tasks = data.columns[status] || [];
     return `<section class="board-column" data-status="${status}">
@@ -68,4 +81,29 @@ export function renderBoard(data) {
   }));
   attachDragHandlers(root);
   renderDependencyOverlay(data);
+  updateColumnNavOnScroll(root, columnNav);
+}
+
+function updateColumnNavOnScroll(root, columnNav) {
+  if (!root || !columnNav) return;
+  const setActive = () => {
+    const boardLeft = root.getBoundingClientRect().left;
+    let active = null;
+    let best = Number.POSITIVE_INFINITY;
+    root.querySelectorAll('.board-column').forEach(column => {
+      const distance = Math.abs(column.getBoundingClientRect().left - boardLeft);
+      if (distance < best) {
+        best = distance;
+        active = column.dataset.status;
+      }
+    });
+    if (!active) return;
+    columnNav.querySelectorAll('[data-column-target]').forEach(button => {
+      const selected = button.dataset.columnTarget === active;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-current', selected ? 'true' : 'false');
+    });
+  };
+  root.addEventListener('scroll', () => requestAnimationFrame(setActive), { passive: true });
+  setActive();
 }
