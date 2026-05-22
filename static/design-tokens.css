@@ -48,6 +48,12 @@
   --radius-md: 16px;
   --radius-lg: 24px;
   --column-min-width: 260px;
+  --status-triage: #64748b;
+  --status-todo: #8b5cf6;
+  --status-ready: #0ea5e9;
+  --status-running: #f59e0b;
+  --status-blocked: #ef4444;
+  --status-done: #22c55e;
 }
 
 :root[data-theme="dark"] {
@@ -94,4 +100,10 @@
   --log-ink: #bfdbfe;
   --markdown-ink: #dbeafe;
   --shadow-soft: 0 22px 70px rgba(0, 0, 0, 0.40);
+  --status-triage: #94a3b8;
+  --status-todo: #c4b5fd;
+  --status-ready: #67e8f9;
+  --status-running: #fbbf24;
+  --status-blocked: #fb7185;
+  --status-done: #86efac;
 }
