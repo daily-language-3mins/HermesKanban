@@ -45,7 +45,12 @@ textarea { width: 100%; resize: vertical; }
 .kpi::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--link); opacity: .72; }
 .kpi small { color: var(--muted); display: block; margin-bottom: 8px; }
 .kpi strong { font-size: 26px; letter-spacing: -0.05em; }
-.board { position: relative; display: grid; grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(var(--column-min-width), 1fr)); gap: 12px; overflow-x: auto; min-height: calc(100vh - 290px); padding: 2px 4px 18px; scroll-snap-type: x proximity; }
+.column-nav { display: none; gap: 8px; margin: 12px 0 10px; overflow-x: auto; padding: 2px 2px 8px; scroll-padding-inline: 12px; }
+.column-nav-button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; min-height: 38px; border: 1px solid var(--hairline); border-radius: 999px; padding: 8px 12px; background: var(--surface-strong); color: var(--ink); font-weight: 800; cursor: pointer; }
+.column-nav-button strong { min-width: 24px; border-radius: 999px; padding: 2px 7px; background: var(--chip-bg); color: var(--muted); font-size: 12px; text-align: center; }
+.column-nav-button.active { border-color: var(--primary); background: var(--primary); color: var(--primary-ink); box-shadow: 0 10px 24px rgba(13, 116, 206, .20); }
+.column-nav-button.active strong { background: rgba(255,255,255,.20); color: inherit; }
+.board { position: relative; display: grid; grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(var(--column-min-width), 1fr)); gap: 12px; overflow-x: auto; min-height: calc(100vh - 290px); padding: 2px 4px 18px; scroll-snap-type: x proximity; scroll-padding-inline: 4px; }
 .board-column { position: relative; min-width: 0; --column-accent: var(--link); border-radius: var(--radius-lg); padding: 10px; align-self: stretch; scroll-snap-align: start; }
 .board-column[data-status="triage"] { --column-accent: var(--status-triage); }
 .board-column[data-status="todo"] { --column-accent: var(--status-todo); }
@@ -224,10 +229,36 @@ textarea { width: 100%; resize: vertical; }
 }
 @media (max-width: 760px) {
   .app-shell { padding: 12px; }
-  .board { min-height: 58vh; scroll-snap-type: x mandatory; grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(calc(100vw - 42px), 1fr)); }
+  .topbar { top: 6px; gap: 12px; }
+  .brand { min-width: 0; }
+  .brand-mark { width: 38px; height: 38px; border-radius: 13px; }
+  .brand h1 { font-size: 18px; }
+  .top-actions, .filters, .toolbar-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .top-actions > *, .filters > *, .toolbar-actions > * { width: 100%; min-width: 0; }
+  .check { grid-column: 1 / -1; }
+  .hero-card { padding: 16px; }
+  .health-panel { min-width: 0; width: 100%; }
+  .kpi-row { grid-template-columns: repeat(var(--kpi-column-count, 6), minmax(112px, 42vw)); padding-bottom: 6px; scroll-snap-type: x proximity; }
+  .kpi { scroll-snap-align: start; }
+  .column-nav { position: sticky; top: 128px; z-index: 8; display: flex; background: color-mix(in srgb, var(--body-background) 86%, transparent); backdrop-filter: blur(16px); }
+  .board { min-height: 58vh; scroll-snap-type: x mandatory; grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(calc(100vw - 32px), 1fr)); gap: 10px; padding-inline: 0; }
+  .board-column { scroll-snap-align: center; padding: 8px; }
+  .board-column header { top: 178px; }
+  .task-card { padding: 11px; }
+  .task-card h3 { font-size: 15px; }
   .drawer { width: 100vw; border-radius: 24px 24px 0 0; top: 8vh; height: 92vh; }
   .inline-form, .dependency-grid, .detail-grid, .dependency-mini-map, .task-field-grid, .workflow-field-grid { grid-template-columns: 1fr; }
   .dependency-mini-current { grid-template-columns: 1fr; gap: 8px; }
   .dependency-mini-current > span { display: none; }
   .monitor-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 430px) {
+  .app-shell { padding: 8px; }
+  .top-actions, .filters, .toolbar-actions, .monitor-grid { grid-template-columns: 1fr; }
+  .column-nav { top: 118px; margin-left: -2px; margin-right: -2px; }
+  .board { grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(calc(100vw - 16px), 1fr)); }
+  .board-column header { top: 168px; }
+  .modal { width: calc(100vw - 16px); min-width: 0; padding: 16px; }
+  .modal-actions, .workflow-draft-actions { display: grid; grid-template-columns: 1fr; }
+  .toast { width: calc(100vw - 24px); border-radius: 18px; text-align: center; }
 }

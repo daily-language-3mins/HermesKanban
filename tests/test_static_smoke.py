@@ -321,6 +321,27 @@ def test_board_columns_fill_available_resolution_width():
     assert '.board-column { position: relative; min-width: 0;' in style
 
 
+def test_mobile_rwd_board_contract():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    assert 'id="columnNav"' in index
+    for phrase in ['columnNav', 'column-nav-button', 'data-column-target', 'scrollIntoView', 'aria-current']:
+        assert phrase in board
+    for phrase in [
+        '.column-nav',
+        '.column-nav-button',
+        '@media (max-width: 760px)',
+        '@media (max-width: 430px)',
+        '.column-nav { position: sticky;',
+        'scroll-snap-type: x mandatory',
+        'grid-template-columns: repeat(var(--kanban-column-count, 6), minmax(calc(100vw - 32px), 1fr))',
+    ]:
+        assert phrase in style
+
+
 def test_kpi_row_uses_dynamic_status_count_when_archived_is_visible():
     root = Path(__file__).resolve().parents[1]
     style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
