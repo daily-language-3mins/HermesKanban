@@ -1,8 +1,8 @@
-import { api } from './api.js?v=20260508-02';
-import { t, applyI18n } from './i18n.js?v=20260508-02';
-import { renderMarkdown, escapeHtml } from './markdown.js?v=20260508-02';
-import { renderMonitor } from './monitor.js?v=20260508-02';
-import { state, toast } from './state.js?v=20260508-02';
+import { api } from './api.js?v=20260522-zh-tw';
+import { t, applyI18n } from './i18n.js?v=20260522-zh-tw';
+import { renderMarkdown, escapeHtml } from './markdown.js?v=20260522-zh-tw';
+import { renderMonitor } from './monitor.js?v=20260522-zh-tw';
+import { state, toast } from './state.js?v=20260522-zh-tw';
 
 export function closeDrawer() {
   const drawer = document.getElementById('drawer');

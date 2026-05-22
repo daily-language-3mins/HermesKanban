@@ -1,14 +1,14 @@
-import { api } from './api.js?v=20260508-02';
-import { applyI18n, lang, setLang, t } from './i18n.js?v=20260508-02';
-import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260508-02';
-import { renderBoard, renderKpis } from './board.js?v=20260508-02';
-import { setupDependencyControls } from './dependency-lines.js?v=20260508-02';
-import { setupForms } from './forms.js?v=20260508-02';
-import { setupMobileFallback } from './mobile.js?v=20260508-02';
-import { setupAppUpdatePrompt } from './update.js?v=20260508-02';
-import { setupOperationsPanel, refreshOperationsPanel } from './operations.js?v=20260508-02';
-import { closeDrawer } from './drawer.js?v=20260508-02';
-import { state, setBoard, toast } from './state.js?v=20260508-02';
+import { api } from './api.js?v=20260522-zh-tw';
+import { applyI18n, nextLang, setLang, t } from './i18n.js?v=20260522-zh-tw';
+import { setupThemeToggle, updateThemeToggleLabel } from './theme.js?v=20260522-zh-tw';
+import { renderBoard, renderKpis } from './board.js?v=20260522-zh-tw';
+import { setupDependencyControls } from './dependency-lines.js?v=20260522-zh-tw';
+import { setupForms } from './forms.js?v=20260522-zh-tw';
+import { setupMobileFallback } from './mobile.js?v=20260522-zh-tw';
+import { setupAppUpdatePrompt } from './update.js?v=20260522-zh-tw';
+import { setupOperationsPanel, refreshOperationsPanel } from './operations.js?v=20260522-zh-tw';
+import { closeDrawer } from './drawer.js?v=20260522-zh-tw';
+import { state, setBoard, toast } from './state.js?v=20260522-zh-tw';
 
 async function loadBoards() {
   const data = await api.boards();
@@ -20,7 +20,13 @@ async function loadBoards() {
     option.textContent = `${b.icon || ''} ${b.name || b.slug} (${b.total || 0})`;
     select.appendChild(option);
   }
-  if (!data.boards.find(b => b.slug === state.board)) setBoard(data.current || 'default');
+  const storedBoard = localStorage.getItem('kanbanBoard');
+  const fallbackBoard = data.current || data.boards[0]?.slug || 'default';
+  if (!storedBoard || (storedBoard === 'default' && data.current && data.current !== 'default')) {
+    setBoard(fallbackBoard);
+  } else if (!data.boards.find(b => b.slug === state.board)) {
+    setBoard(fallbackBoard);
+  }
   select.value = state.board;
 }
 
@@ -88,7 +94,7 @@ export async function load() {
   state.latestEventId = data.latest_event_id;
   renderAssigneeControls(data);
   document.getElementById('boardTitle').textContent = data.board_meta.name || data.board;
-  document.getElementById('boardDescription').textContent = data.board_meta.description || 'Hermes CLI와 같은 DB를 사용하는 전용 칸반 WebUI';
+  document.getElementById('boardDescription').textContent = data.board_meta.description || t('subtitle');
   renderKpis(data);
   renderBoard(data);
   await refreshOperationsPanel();
@@ -97,7 +103,7 @@ export async function load() {
 
 function setupControls() {
   document.getElementById('refreshBtn').addEventListener('click', load);
-  document.getElementById('langToggle').addEventListener('click', () => { setLang(lang() === 'ko' ? 'en' : 'ko'); updateThemeToggleLabel(); load(); });
+  document.getElementById('langToggle').addEventListener('click', () => { setLang(nextLang()); updateThemeToggleLabel(); load(); });
   document.getElementById('boardSelect').addEventListener('change', async ev => {
     setBoard(ev.target.value);
     await api.switchBoard(state.board);

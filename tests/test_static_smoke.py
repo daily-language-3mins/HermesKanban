@@ -40,7 +40,7 @@ def test_app_update_static_contract():
     ]:
         assert phrase in index
 
-    assert './update.js?v=20260508-02' in app
+    assert './update.js?v=20260522-zh-tw' in app
     assert 'setupAppUpdatePrompt' in app
     for phrase in ['appUpdateStatus', '/api/app/update-status', 'applyAppUpdate', '/api/app/update']:
         assert phrase in api
@@ -71,6 +71,28 @@ def test_static_javascript_parses():
         subprocess.run([node, '--check', str(path)], check=True, cwd=root)
 
 
+def test_default_language_is_traditional_chinese():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    app = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+
+    assert '<html lang="zh-Hant">' in index
+    assert "DEFAULT_LANGUAGE = 'zh-Hant'" in i18n
+    assert "'zh-Hant'" in i18n
+    assert "['zh-Hant', 'en', 'ko']" in i18n
+    assert '清楚好讀的任務營運看板' in index
+    assert '清楚好讀的任務營運看板' in i18n
+    assert '업데이트' not in index
+    assert '확인 중' not in index
+    assert 'LANGUAGE_TOGGLE_LABELS' in i18n
+    assert 'nextLang' in app
+    assert "storedBoard === 'default'" in app
+    assert 'fallbackBoard = data.current' in app
+    assert "lang() === 'ko'" not in app
+    assert 'labels.ko[key]' not in i18n
+
+
 def test_dark_mode_static_contract():
     root = Path(__file__).resolve().parents[1]
     index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
@@ -82,9 +104,9 @@ def test_dark_mode_static_contract():
 
     assert 'id="themeToggle"' in index
     assert 'aria-pressed="false"' in index
-    assert 'style.css?v=20260508-02' in index
-    assert 'app.js?v=20260508-02' in index
-    assert './theme.js?v=20260508-02' in app
+    assert 'style.css?v=20260522-zh-tw' in index
+    assert 'app.js?v=20260522-zh-tw' in index
+    assert './theme.js?v=20260522-zh-tw' in app
     assert 'setupThemeToggle' in app
     assert 'updateThemeToggleLabel' in app
     assert 'kanbanTheme' in theme
@@ -231,8 +253,8 @@ def test_unassigned_tasks_are_visually_flagged():
         assert key in i18n
     for css_class in ['.task-card.is-unassigned', '.profile-missing-badge', '.chips .missing-assignee-chip']:
         assert css_class in style
-    assert './board.js?v=20260508-02' in app
-    assert './i18n.js?v=20260508-02' in board
+    assert './board.js?v=20260522-zh-tw' in app
+    assert './i18n.js?v=20260522-zh-tw' in board
     for token in ['--warning-soft', '--warning-ring']:
         assert token in tokens
 
@@ -248,7 +270,7 @@ def test_operations_dashboard_static_contract():
 
     for phrase in ['id="opsToggleBtn"', 'id="opsPanel"']:
         assert phrase in index
-    assert './operations.js?v=20260508-02' in app
+    assert './operations.js?v=20260522-zh-tw' in app
     for phrase in ['opsSummary', '/api/ops/summary']:
         assert phrase in api
     for phrase in ['renderOperationsPanel', 'setupOperationsPanel', 'retry_queue', 'blocked_after_retries', 'openTaskDrawer']:

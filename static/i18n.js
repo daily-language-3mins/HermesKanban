@@ -1,4 +1,26 @@
+export const LANGUAGE_ORDER = ['zh-Hant', 'en', 'ko'];
+export const LANGUAGE_TOGGLE_LABELS = { 'zh-Hant': '繁中', en: 'EN', ko: 'KO' };
+export const DEFAULT_LANGUAGE = 'zh-Hant';
+
 export const labels = {
+  'zh-Hant': {
+    subtitle: '清楚好讀的任務營運看板', newBoard: '新增看板', refresh: '重新整理', themeDark: '切換深色', themeLight: '切換淺色', quickTitle: '輸入任務標題後按 Enter',
+    taskCreate: '新增任務', taskCreateHint: '需要設定標題、說明、代理 profile 與狀態時，在這裡建立新 task。', taskTitlePlaceholder: '任務標題', taskBodyPlaceholder: '任務說明／指示（選填）',
+    assignee: '負責 profile', create: '新增', created: '建立時間', createdToast: '已建立', search: '搜尋標題／內容／ID', allAssignees: '全部負責人', unassigned: '未指定', profileMissing: '尚未指定負責 profile', profileMissingShort: '需要 profile', agentProfile: 'profile', manualAssignee: '手動', showArchived: '顯示封存',
+    bulkCreate: '批次新增', boardName: '看板名稱', description: '說明', cancel: '取消', bulkHint: '每行輸入一個任務。', loading: '載入中…',
+    workflow: 'Workflow', workflowCreate: '建立 AI Workflow', workflowDesignerHint: '用提示詞與附件設計任務 DAG，核准後套用成真正的 Kanban task。', workflowPrompt: 'Workflow 提示詞', workflowPromptPlaceholder: '描述目標、交付物、限制與期望步驟數', workflowPlannerProfile: 'Planner profile', workflowAttachments: '附件', workflowPlan: '規劃', workflowPlanning: 'AI 正在設計 workflow 草稿…', workflowRevise: '修改', workflowRevisionPlaceholder: '描述要調整的步驟／profile／依賴關係', workflowApply: '套用', workflowDraftStatus: '草稿狀態', workflowDraftEmpty: '輸入提示詞並按「規劃」後會顯示草稿。', workflowNotApplyable: '這份草稿目前還不能套用。請先解決問題後送出修改。', workflowInstance: 'Instance ID', workflowStep: '目前步驟', workflowSteps: '步驟',
+    updateAvailable: '有新版本可用', updateTitle: 'KanbanWebUI 更新', updateApply: '更新並重新啟動', updateLater: '稍後', updateChecking: '正在檢查更新狀態…', updateRestarting: '正在套用更新…伺服器重新啟動後頁面會自動重載。', updateBlocked: '無法自動更新', updateNoCommits: '沒有 commit 明細',
+    triage: '分流', todo: '待辦', ready: '就緒', running: '執行中', blocked: '卡住', done: '完成', archived: '封存',
+    title: '標題', body: '內容', noDescription: '沒有說明', priority: '優先級', status: '狀態', workspace: '工作區', createdBy: '建立者',
+    comments: '留言', events: '事件', runs: '執行紀錄', monitor: 'Live Run Monitor', context: '脈絡', log: '紀錄', workerLog: 'Worker 紀錄',
+    dependencies: '依賴關係', parents: '上游', children: '下游', parent: '上游', child: '下游', chooseTask: '選擇任務', none: '無', remove: '移除',
+    parentPortHint: '左側上游連接點：拖曳到另一個 task 的右側下游連接點，建立上游關係', childPortHint: '右側下游連接點：拖曳到另一個 task 的左側上游連接點，建立下游關係', linkCreatedToast: '已建立上游／下游連結', linkInvalidToast: '只能連接左側上游連接點與右側下游連接點。', linkSameTaskToast: '同一個 task 不能連到自己。',
+    dependencyViewFocus: '關係線：以選取為中心', dependencyViewAll: '關係線：全部', dependencyViewBlocked: '關係線：卡住', dependencyViewOff: '關係線：隱藏',
+    dependencyMap: '關係地圖', currentTask: '目前任務', noDependencies: '沒有上游／下游連結',
+    notifyHomeChannels: '通知 home channel', noHomeChannels: '沒有設定 home channel', noWorkerLog: '尚無 worker 紀錄',
+    complete: '完成', block: '標記卡住', unblock: '解除卡住', archive: '封存', save: '儲存', close: '關閉', addComment: '新增留言',
+    operations: 'Operations', opsOverview: 'Operations 總覽', opsRunning: '執行中', opsHeartbeatOverdue: 'Heartbeat 逾時', opsRetryQueue: 'Retry queue', opsBlockedAfterRetries: '重試後卡住', opsRecentFailures: '近期失敗', opsNoRunning: '沒有執行中的任務', opsNoRetry: '沒有可重試項目', opsNoBlockedAfterRetries: '沒有重試後卡住的任務', opsNoFailures: '近期沒有失敗事件', opsEligibleNow: '現在可執行', opsEstimatedWait: '預估等待', opsAttempt: '嘗試次數', opsLastError: '最後錯誤', opsOpenTask: '開啟任務', opsEstimatedBackoffAdvisory: '顯示的 backoff 是依目前失敗資訊估算的參考值，dispatcher 尚未強制套用。', empty: '無'
+  },
   ko: {
     subtitle: '읽기 쉬운 작업 운영 보드', newBoard: '보드 추가', refresh: '새로고침', themeDark: '다크로 전환', themeLight: '라이트로 전환', quickTitle: '작업 제목을 입력하고 Enter',
     taskCreate: 'Task 추가', taskCreateHint: '필요할 때만 제목, 설명, 담당 프로필, 상태를 입력해 새 task를 생성합니다.', taskTitlePlaceholder: '작업 제목', taskBodyPlaceholder: '작업 설명/지시사항(선택)',
@@ -37,16 +59,24 @@ export const labels = {
   }
 };
 
-let currentLang = localStorage.getItem('kanbanLang') || 'ko';
+function normalizeLang(value) {
+  return LANGUAGE_ORDER.includes(value) ? value : DEFAULT_LANGUAGE;
+}
+
+let currentLang = normalizeLang(localStorage.getItem('kanbanLang'));
 
 export function lang() { return currentLang; }
-export function setLang(next) { currentLang = next === 'en' ? 'en' : 'ko'; localStorage.setItem('kanbanLang', currentLang); applyI18n(); }
-export function t(key) { return (labels[currentLang] && labels[currentLang][key]) || labels.ko[key] || key; }
+export function nextLang(current = currentLang) {
+  const index = LANGUAGE_ORDER.indexOf(normalizeLang(current));
+  return LANGUAGE_ORDER[(index + 1) % LANGUAGE_ORDER.length];
+}
+export function setLang(next) { currentLang = normalizeLang(next); localStorage.setItem('kanbanLang', currentLang); applyI18n(); }
+export function t(key) { return (labels[currentLang] && labels[currentLang][key]) || labels[DEFAULT_LANGUAGE][key] || key; }
 
 export function applyI18n(root = document) {
   root.documentElement?.setAttribute('lang', currentLang);
   root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
   const toggle = root.getElementById?.('langToggle');
-  if (toggle) toggle.textContent = currentLang === 'ko' ? 'EN' : 'KO';
+  if (toggle) toggle.textContent = LANGUAGE_TOGGLE_LABELS[nextLang()];
 }
