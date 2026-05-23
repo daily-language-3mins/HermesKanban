@@ -1,8 +1,8 @@
-import { api } from './api.js?v=20260508-02';
-import { t } from './i18n.js?v=20260508-02';
-import { escapeHtml } from './markdown.js?v=20260508-02';
-import { openTaskDrawer } from './drawer.js?v=20260508-02';
-import { state, toast } from './state.js?v=20260508-02';
+import { api } from './api.js?v=20260522-zh-tw';
+import { t } from './i18n.js?v=20260522-zh-tw';
+import { escapeHtml } from './markdown.js?v=20260522-zh-tw';
+import { openTaskDrawer } from './drawer.js?v=20260522-zh-tw';
+import { state, toast } from './state.js?v=20260522-zh-tw';
 
 function panel() { return document.getElementById('opsPanel'); }
 function toggleButton() { return document.getElementById('opsToggleBtn'); }
