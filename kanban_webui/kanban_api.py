@@ -776,6 +776,23 @@ def create_workflow_draft(payload: WorkflowDraftCreateBody, board: Optional[str]
         conn.close()
 
 
+@router.get("/workflows/drafts")
+def list_workflow_drafts(
+    board: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    settings = get_settings()
+    drafts, warnings = workflow_drafts.list_draft_summaries(settings, board=selected, query=q)
+    return {
+        "ok": True,
+        "board": selected,
+        "drafts": drafts,
+        "count": len(drafts),
+        "invalid_drafts": warnings,
+    }
+
+
 @router.get("/workflows/drafts/{draft_id}")
 def get_workflow_draft(draft_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
     selected = _resolve_board(board)
