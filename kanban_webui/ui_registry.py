@@ -16,6 +16,7 @@ CLI_PARITY = [
     {"cli": "unlink", "api": "DELETE /api/links", "ui": "dependency editor"},
     {"cli": "claim", "api": "POST /api/tasks/{task_id}/claim", "ui": "advanced action"},
     {"cli": "heartbeat", "api": "POST /api/tasks/{task_id}/heartbeat", "ui": "Live Run Monitor"},
+    {"cli": "reclaim", "api": "POST /api/tasks/{task_id}/cancel", "ui": "running task cancel/reclaim action"},
     {"cli": "comment", "api": "POST /api/tasks/{task_id}/comments", "ui": "drawer comments"},
     {"cli": "complete", "api": "POST /api/tasks/{task_id}/complete", "ui": "done drop/dialog"},
     {"cli": "block", "api": "POST /api/tasks/{task_id}/block", "ui": "blocked drop/dialog"},
