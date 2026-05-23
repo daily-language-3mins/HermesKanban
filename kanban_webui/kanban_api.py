@@ -161,6 +161,10 @@ class HeartbeatBody(BaseModel):
     extend_claim: bool = False
 
 
+class CancelTaskBody(BaseModel):
+    reason: Optional[str] = None
+
+
 class CommentBody(BaseModel):
     body: str
     author: Optional[str] = "kanban-webui"
@@ -1287,6 +1291,64 @@ def heartbeat_task(task_id: str, payload: HeartbeatBody, board: Optional[str] = 
         return {"ok": True, "claim_extended": claim_extended, "task": task_dict(kanban_db.get_task(conn, task_id))}
     finally:
         conn.close()
+
+
+@router.post("/tasks/{task_id}/cancel")
+def cancel_task(
+    task_id: str,
+    payload: Optional[CancelTaskBody] = None,
+    board: Optional[str] = Query(None),
+    confirm: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    """Safely cancel a running task by reclaiming its worker claim.
+
+    Cancellation is intentionally conservative: the WebUI does not send
+    process signals itself. It requires an installed kanban_db.reclaim_task
+    implementation and delegates all claim/run cleanup (and any host-local
+    termination safety checks) to that core API.
+    """
+    selected = _resolve_board(board)
+    if confirm != "cancel":
+        raise HTTPException(status_code=400, detail="task cancellation requires confirm=cancel")
+    if not hasattr(kanban_db, "reclaim_task"):
+        raise HTTPException(status_code=501, detail="safe task cancellation is not supported by this Hermes core")
+    body = payload or CancelTaskBody()
+    conn = kanban_db.connect(board=selected)
+    try:
+        task = kanban_db.get_task(conn, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        if task.status != "running":
+            raise HTTPException(status_code=409, detail="task is not running")
+        ok = kanban_db.reclaim_task(conn, task_id, reason=body.reason or "kanban-webui cancel")
+        if not ok:
+            raise HTTPException(status_code=409, detail="task could not be cancelled; it may no longer be running")
+        task = kanban_db.get_task(conn, task_id)
+        runs = kanban_db.list_runs(conn, task_id)
+        events = kanban_db.list_events(conn, task_id)
+        return {
+            "ok": True,
+            "action": "cancelled",
+            "semantics": "reclaimed_claim_no_webui_pid_kill",
+            "board": selected,
+            "task": task_dict(task) if task else None,
+            "active_run": run_dict(kanban_db.active_run(conn, task_id)) if kanban_db.active_run(conn, task_id) else None,
+            "runs": [run_dict(r) for r in runs],
+            "last_event": event_dict(events[-1]) if events else None,
+        }
+    finally:
+        conn.close()
+
+
+@router.post("/tasks/{task_id}/reclaim")
+def reclaim_task_endpoint(
+    task_id: str,
+    payload: Optional[CancelTaskBody] = None,
+    board: Optional[str] = Query(None),
+    confirm: Optional[str] = Query(None),
+) -> dict[str, Any]:
+    """Alias for /cancel using the same confirmed safe-reclaim semantics."""
+    return cancel_task(task_id, payload=payload, board=board, confirm=confirm)
 
 
 @router.post("/tasks/{task_id}/comments")

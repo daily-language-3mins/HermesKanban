@@ -242,6 +242,7 @@ export async function openTaskDrawer(taskId) {
         <button data-action="block" data-status="blocked" class="button ghost">${t('block')}</button>
         <button data-action="unblock" data-status="ready" class="button ghost">${t('unblock')}</button>
         <button data-action="complete" data-status="done" class="button ghost">${t('complete')}</button>
+        ${task.status === 'running' ? `<button data-action="cancel-running" class="button ghost danger-btn">${t('cancelRunning')}</button>` : ''}
         <button data-action="archive" data-status="archived" class="button ghost danger-btn">${t('archive')}</button>
       </div>
     </section>
@@ -301,6 +302,14 @@ export async function openTaskDrawer(taskId) {
         await actionStatus(status, { summary, result: summary });
       } else if (action === 'archive') {
         if (confirm('Archive this task?')) await actionStatus(status);
+      } else if (action === 'cancel-running') {
+        const reason = prompt('Cancel running worker and reclaim this task? Type a reason or leave blank.');
+        if (reason !== null) {
+          await api.cancelTask(state.board, task.id, { reason: reason || 'kanban-webui cancel' });
+          toast('worker cancelled; task reclaimed');
+          document.dispatchEvent(new CustomEvent('kanban:refresh'));
+          await openTaskDrawer(task.id);
+        }
       } else {
         await actionStatus(status);
       }
