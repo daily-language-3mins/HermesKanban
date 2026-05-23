@@ -93,6 +93,20 @@ def test_default_language_is_traditional_chinese():
     assert 'labels.ko[key]' not in i18n
 
 
+def test_docs_describe_traditional_chinese_as_default_language():
+    root = Path(__file__).resolve().parents[1]
+    readme = (root / 'README.md').read_text(encoding='utf-8')
+    design = (root / 'DESIGN.md').read_text(encoding='utf-8')
+    changelog = (root / 'CHANGELOG.md').read_text(encoding='utf-8')
+
+    assert 'Traditional Chinese (`zh-Hant`) UI by default' in readme
+    assert 'English' in readme
+    assert 'Traditional Chinese (`zh-Hant`) labels by default' in design
+    assert 'Korean UI by default' not in readme
+    assert 'Korean labels by default' not in design
+    assert 'Korean default UI' not in changelog
+
+
 def test_dark_mode_static_contract():
     root = Path(__file__).resolve().parents[1]
     index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
