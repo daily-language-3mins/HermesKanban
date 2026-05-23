@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from .auth import require_auth
 from .config import STATIC_DIR, get_settings
@@ -18,6 +19,7 @@ from .service_status import service_status
 
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 TAILSCALE_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 def _split_host(value: str) -> str:
@@ -60,9 +62,19 @@ def _same_origin(request: Request, value: str) -> bool:
     return bool(parsed.scheme in {"http", "https"} and parsed.netloc == target_host)
 
 
+def _apply_delivery_headers(request: Request, response) -> None:
+    """Add conservative cache policy headers without changing response bodies."""
+    if request.url.path.startswith("/api/") or request.url.path == "/service/status":
+        response.headers.setdefault("Cache-Control", "no-store")
+        return
+    if request.url.path.startswith("/static/") and request.query_params.get("v"):
+        response.headers["Cache-Control"] = IMMUTABLE_CACHE_CONTROL
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_title, version="0.1.0")
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     @app.middleware("http")
     async def validate_host_and_reject_cross_origin_mutations(request: Request, call_next):
@@ -86,7 +98,9 @@ def create_app() -> FastAPI:
                 blocked = blocked or not _same_origin(request, referer)
             if blocked:
                 return JSONResponse({"detail": "cross-origin mutation blocked"}, status_code=403)
-        return await call_next(request)
+        response = await call_next(request)
+        _apply_delivery_headers(request, response)
+        return response
 
     @app.get("/health")
     def health() -> dict:
