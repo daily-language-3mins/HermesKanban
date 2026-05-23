@@ -304,9 +304,9 @@ def test_operations_dashboard_static_contract():
     assert './operations.js?v=20260522-zh-tw' in app
     for phrase in ['opsSummary', '/api/ops/summary']:
         assert phrase in api
-    for phrase in ['renderOperationsPanel', 'setupOperationsPanel', 'retry_queue', 'blocked_after_retries', 'openTaskDrawer']:
+    for phrase in ['renderOperationsPanel', 'setupOperationsPanel', 'retry_queue', 'blocked_after_retries', 'retry_timing', 'openTaskDrawer']:
         assert phrase in ops
-    for key in ['operations', 'opsOverview', 'opsRunning', 'opsRetryQueue', 'opsBlockedAfterRetries', 'opsEstimatedBackoffAdvisory']:
+    for key in ['operations', 'opsOverview', 'opsRunning', 'opsRetryQueue', 'opsRetryQueueAdvisory', 'opsBlockedAfterRetries', 'opsEstimatedBackoffAdvisory', 'opsEstimatedBackoffAdvisoryColumn']:
         assert key in i18n
     for css_class in ['.ops-panel', '.ops-grid', '.ops-table', '.ops-chip']:
         assert css_class in style

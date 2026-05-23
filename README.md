@@ -321,9 +321,10 @@ The old built-in workflow template API is deprecated and returns `410 Gone`; pro
   `confirm=dispatch`)
 - `POST /api/gc` requires `confirm=gc`
 
-Retry backoff shown in the Operations panel is an advisory estimate derived
-from current failure metadata; dispatcher-level backoff enforcement is a
-separate Hermes core enhancement.
+Retry backoff and `eligible_at`/`eligible_in_seconds` values shown by the
+Operations API/UI are advisory estimates derived from current failure metadata;
+they are not dispatcher-enforced scheduling guarantees. Dispatcher-level
+backoff enforcement is a separate Hermes core enhancement.
 
 ## Tests
 

@@ -52,6 +52,17 @@ def _set_run_heartbeat(task_id: str, heartbeat_at: int, started_at: int) -> None
         conn.close()
 
 
+def _build_ops_summary(now: int | None = None) -> dict[str, Any]:
+    from kanban_webui.hermes_imports import kanban_db
+    from kanban_webui.operations import build_operations_summary
+
+    conn = kanban_db.connect(board='default')
+    try:
+        return build_operations_summary(conn, board='default', now=now)
+    finally:
+        conn.close()
+
+
 def test_ops_summary_includes_running_claim_and_heartbeat(client):
     task_id = _create(client, 'Running task', body='Long operation body', assignee='dev', max_runtime_seconds=3600)
 
@@ -122,7 +133,60 @@ def test_ops_summary_includes_retry_candidates_from_failure_fields(client):
     assert retry['estimated_backoff_seconds'] == 20
     assert retry['eligible_at'] == now - 10
     assert retry['eligible_in_seconds'] == 0
+    assert retry['timing_advisory'] is True
     assert retry['state'] == 'eligible'
+    assert data['retry_timing']['advisory'] is True
+    assert data['retry_timing']['base_seconds'] == 10
+    assert data['retry_timing']['cap_seconds'] == 300
+    assert 'not dispatcher-enforced' in data['retry_timing']['message']
+    assert data['advisory_backoff'] == data['retry_timing']['message']
+
+
+def test_ops_retry_backoff_estimates_future_eligible_time(client):
+    task_id = _create(client, 'Future retry estimate', assignee='dev')
+    fixed_now = 1_800_000_000
+    _mutate_task(
+        task_id,
+        {
+            'status': 'ready',
+            'consecutive_failures': 2,
+            'last_failure_error': 'not yet',
+        },
+    )
+    _insert_event(task_id, 'spawn_failed', {'error': 'not yet'}, fixed_now - 5)
+
+    data = _build_ops_summary(now=fixed_now)
+
+    retry = data['retry_queue'][0]
+    assert retry['task']['id'] == task_id
+    assert retry['estimated_backoff_seconds'] == 20
+    assert retry['eligible_at'] == fixed_now + 15
+    assert retry['eligible_in_seconds'] == 15
+    assert retry['timing_advisory'] is True
+    assert retry['state'] == 'estimated_wait'
+
+
+def test_ops_retry_backoff_estimate_is_capped(client):
+    task_id = _create(client, 'Capped retry estimate', assignee='dev')
+    fixed_now = 1_800_000_000
+    _mutate_task(
+        task_id,
+        {
+            'status': 'ready',
+            'consecutive_failures': 6,
+            'last_failure_error': 'still failing',
+        },
+    )
+    _insert_event(task_id, 'crashed', {'error': 'still failing'}, fixed_now - 100)
+
+    data = _build_ops_summary(now=fixed_now)
+
+    retry = data['retry_queue'][0]
+    assert retry['task']['id'] == task_id
+    assert retry['estimated_backoff_seconds'] == 300
+    assert retry['eligible_at'] == fixed_now + 200
+    assert retry['eligible_in_seconds'] == 200
+    assert retry['state'] == 'estimated_wait'
 
 
 def test_ops_summary_separates_blocked_after_retries(client):

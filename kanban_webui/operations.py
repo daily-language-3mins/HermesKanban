@@ -18,6 +18,10 @@ FAILURE_EVENT_KINDS = {
 HEARTBEAT_OVERDUE_SECONDS = 300
 BACKOFF_BASE_SECONDS = 10
 BACKOFF_CAP_SECONDS = 300
+ADVISORY_BACKOFF_MESSAGE = (
+    "Retry timing is advisory: eligible_at and eligible_in_seconds are estimates "
+    "for Operations visibility only and are not dispatcher-enforced backoff."
+)
 
 
 def build_operations_summary(
@@ -69,7 +73,14 @@ def build_operations_summary(
         "retry_queue": retry_items,
         "blocked_after_retries": blocked_items,
         "recent_failures": recent_failures,
-        "advisory_backoff": "estimated_backoff_seconds is advisory until dispatcher-level backoff is implemented.",
+        "retry_timing": {
+            "advisory": True,
+            "base_seconds": BACKOFF_BASE_SECONDS,
+            "cap_seconds": BACKOFF_CAP_SECONDS,
+            "message": ADVISORY_BACKOFF_MESSAGE,
+        },
+        # Backwards-compatible top-level label for existing clients.
+        "advisory_backoff": ADVISORY_BACKOFF_MESSAGE,
     }
 
 
@@ -136,6 +147,7 @@ def _failure_item(
                 "estimated_backoff_seconds": estimated,
                 "eligible_at": eligible_at,
                 "eligible_in_seconds": eligible_in,
+                "timing_advisory": True,
                 "state": "eligible" if eligible_in == 0 else "estimated_wait",
             }
         )
