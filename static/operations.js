@@ -61,7 +61,7 @@ export function renderOperationsPanel(data) {
       <div>
         <p class="eyebrow">${t('operations')}</p>
         <h2>${t('opsOverview')}</h2>
-        <p class="muted">${escapeHtml(t('opsEstimatedBackoffAdvisory'))}</p>
+        <p class="muted">${escapeHtml(data?.retry_timing?.message || t('opsEstimatedBackoffAdvisory'))}</p>
       </div>
       <span class="ops-chip">${formatTimestamp(data?.now)}</span>
     </div>
@@ -109,7 +109,7 @@ function renderRunningTable(items) {
 function renderRetryTable(items) {
   const rows = items.map(item => {
     const task = item.task || {};
-    const stateLabel = item.state === 'eligible' ? t('opsEligibleNow') : `${t('opsEstimatedWait')} ${formatDuration(item.eligible_in_seconds)}`;
+    const stateLabel = item.state === 'eligible' ? t('opsEstimatedEligibleNow') : `${t('opsEstimatedWait')} ${formatDuration(item.eligible_in_seconds)}`;
     return `<tr data-ops-task-id="${escapeHtml(task.id || '')}">
       <td>${taskLink(task)}</td>
       <td>${escapeHtml(task.assignee || t('unassigned'))}</td>
@@ -119,7 +119,7 @@ function renderRetryTable(items) {
       <td><span class="ops-chip warning">${formatDuration(item.estimated_backoff_seconds)}</span> ${escapeHtml(stateLabel)}</td>
     </tr>`;
   }).join('');
-  return section(t('opsRetryQueue'), items.length ? table(['Task', t('assignee'), t('opsAttempt'), 'Kind', t('opsLastError'), 'Estimated backoff'], rows) : empty(t('opsNoRetry')));
+  return section(t('opsRetryQueueAdvisory'), items.length ? table(['Task', t('assignee'), t('opsAttempt'), 'Kind', t('opsLastError'), t('opsEstimatedBackoffAdvisoryColumn')], rows) : empty(t('opsNoRetry')));
 }
 
 function renderBlockedAfterRetries(items) {
