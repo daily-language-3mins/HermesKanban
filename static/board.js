@@ -38,6 +38,33 @@ function hermesSignals(task, parents, children) {
   return signals.join('');
 }
 
+const expandedEmptyStatuses = new Set();
+let emptyColumnFocusDisabled = false;
+
+function shouldFocusNonEmptyColumns(statuses, data) {
+  const populatedStatuses = statuses.filter(status => (data.columns[status] || []).length > 0);
+  const taskCount = populatedStatuses.reduce((sum, status) => sum + (data.columns[status] || []).length, 0);
+  const emptyCount = statuses.length - populatedStatuses.length;
+  return !emptyColumnFocusDisabled && taskCount > 0 && populatedStatuses.length <= 2 && emptyCount >= 3;
+}
+
+function emptyColumnDock(collapsedStatuses) {
+  if (!collapsedStatuses.length) return '';
+  const buttons = collapsedStatuses.map(status => {
+    const statusLabel = escapeHtml(t(status));
+    const revealLabel = escapeHtml(`${t('showColumn')}: ${t(status)}`);
+    const addLabel = escapeHtml(`${t('addTaskToColumn')}: ${t(status)}`);
+    return `<div class="collapsed-column-chip" data-collapsed-status="${escapeHtml(status)}">
+      <button type="button" class="collapsed-column-reveal" data-reveal-column="${escapeHtml(status)}" aria-label="${revealLabel}"><span>${statusLabel}</span><strong>0</strong></button>
+      <button type="button" class="mini-add" data-status="${escapeHtml(status)}" aria-label="${addLabel}" title="${addLabel}">＋</button>
+    </div>`;
+  }).join('');
+  return `<aside class="empty-columns-dock" aria-label="${escapeHtml(t('collapsedEmptyColumns'))}">
+    <div><strong>${escapeHtml(t('emptyColumnsCollapsed'))}</strong><span>${escapeHtml(t('emptyColumnsCollapsedHint'))}</span></div>
+    <div class="collapsed-column-list">${buttons}</div>
+  </aside>`;
+}
+
 function card(task) {
   const isUnassigned = !task.assignee;
   const assigneeHint = escapeHtml(t('profileMissing'));
@@ -88,29 +115,58 @@ export function renderBoard(data) {
   const root = document.getElementById('board');
   const columnNav = document.getElementById('columnNav');
   const statuses = data.column_order || [];
-  root.style.setProperty('--kanban-column-count', String(Math.max(1, statuses.length)));
+  const focusEmptyColumns = shouldFocusNonEmptyColumns(statuses, data);
+  const collapsedStatuses = focusEmptyColumns
+    ? statuses.filter(status => !(data.columns[status] || []).length && !expandedEmptyStatuses.has(status))
+    : [];
+  const visibleStatuses = statuses.filter(status => !collapsedStatuses.includes(status));
+  root.classList.toggle('is-focused-empty-columns', collapsedStatuses.length > 0);
+  root.style.setProperty('--kanban-column-count', String(Math.max(1, visibleStatuses.length + (collapsedStatuses.length ? 1 : 0))));
   if (columnNav) {
-    columnNav.innerHTML = statuses.map((status, idx) => {
+    const navButtons = statuses.map((status, idx) => {
       const count = (data.columns[status] || []).length;
-      return `<button type="button" class="column-nav-button${idx === 0 ? ' active' : ''}" data-column-target="${status}" aria-current="${idx === 0 ? 'true' : 'false'}"><span>${t(status)}</span><strong>${count}</strong></button>`;
+      const collapsed = collapsedStatuses.includes(status);
+      const current = idx === 0 && !collapsed;
+      return `<button type="button" class="column-nav-button${current ? ' active' : ''}${collapsed ? ' is-collapsed-empty' : ''}" data-column-target="${escapeHtml(status)}" data-column-collapsed="${collapsed ? 'true' : 'false'}" aria-current="${current ? 'true' : 'false'}"><span>${escapeHtml(t(status))}</span><strong>${count}</strong></button>`;
     }).join('');
+    const toggle = collapsedStatuses.length
+      ? `<button type="button" class="column-nav-button show-empty-columns" data-show-empty-columns><span>${escapeHtml(t('showEmptyColumns'))}</span><strong>${collapsedStatuses.length}</strong></button>`
+      : (focusEmptyColumns || emptyColumnFocusDisabled ? `<button type="button" class="column-nav-button show-empty-columns" data-focus-empty-columns><span>${escapeHtml(t('focusNonEmptyColumns'))}</span></button>` : '');
+    columnNav.innerHTML = navButtons + toggle;
     columnNav.querySelectorAll('[data-column-target]').forEach(button => {
       button.addEventListener('click', () => {
-        const target = [...root.querySelectorAll('.board-column')].find(column => column.dataset.status === button.dataset.columnTarget);
+        const status = button.dataset.columnTarget;
+        if (button.dataset.columnCollapsed === 'true') {
+          expandedEmptyStatuses.add(status);
+          renderBoard(data);
+          requestAnimationFrame(() => document.getElementById(`column-${status}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }));
+          return;
+        }
+        const target = [...root.querySelectorAll('.board-column')].find(column => column.dataset.status === status);
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
       });
     });
+    columnNav.querySelector('[data-show-empty-columns]')?.addEventListener('click', () => {
+      emptyColumnFocusDisabled = true;
+      statuses.forEach(status => expandedEmptyStatuses.add(status));
+      renderBoard(data);
+    });
+    columnNav.querySelector('[data-focus-empty-columns]')?.addEventListener('click', () => {
+      emptyColumnFocusDisabled = false;
+      expandedEmptyStatuses.clear();
+      renderBoard(data);
+    });
   }
-  root.innerHTML = statuses.map(status => {
+  root.innerHTML = visibleStatuses.map(status => {
     const tasks = data.columns[status] || [];
     const addLabel = escapeHtml(`${t('addTaskToColumn')}: ${t(status)}`);
     const emptyHint = escapeHtml(t('emptyColumnHint'));
-    return `<section class="board-column" id="column-${escapeHtml(status)}" data-status="${status}">
-      <header><div><h2>${t(status)}</h2><small>${tasks.length}</small></div><button class="mini-add" data-status="${status}" aria-label="${addLabel}" title="${addLabel}">＋</button></header>
+    return `<section class="board-column" id="column-${escapeHtml(status)}" data-status="${escapeHtml(status)}" data-empty-column="${tasks.length ? 'false' : 'true'}">
+      <header><div><h2>${escapeHtml(t(status))}</h2><small>${tasks.length}</small></div><button class="mini-add" data-status="${escapeHtml(status)}" aria-label="${addLabel}" title="${addLabel}">＋</button></header>
       <div class="drop-placeholder"></div>
-      <div class="cards">${tasks.length ? tasks.map(card).join('') : `<div class="empty empty-column-card"><strong>${t('empty')}</strong><span>${emptyHint}</span></div>`}</div>
+      <div class="cards">${tasks.length ? tasks.map(card).join('') : `<div class="empty empty-column-card"><strong>${escapeHtml(t('empty'))}</strong><span>${emptyHint}</span></div>`}</div>
     </section>`;
-  }).join('');
+  }).join('') + emptyColumnDock(collapsedStatuses);
   root.querySelectorAll('.task-card').forEach(el => {
     const open = () => {
       selectDependencyTask(el.dataset.taskId);
@@ -129,6 +185,11 @@ export function renderBoard(data) {
       }
     });
   });
+  root.querySelectorAll('[data-reveal-column]').forEach(btn => btn.addEventListener('click', () => {
+    expandedEmptyStatuses.add(btn.dataset.revealColumn);
+    renderBoard(data);
+    requestAnimationFrame(() => document.getElementById(`column-${btn.dataset.revealColumn}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }));
+  }));
   root.querySelectorAll('.mini-add').forEach(btn => btn.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('kanban:open-task-create', { detail: { status: btn.dataset.status } }));
   }));

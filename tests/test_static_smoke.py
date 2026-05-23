@@ -395,6 +395,45 @@ def test_mobile_rwd_board_contract():
         assert phrase in style
 
 
+def test_issue17_empty_column_focus_contract():
+    root = Path(__file__).resolve().parents[1]
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    for phrase in [
+        'shouldFocusNonEmptyColumns',
+        'populatedStatuses.length <= 2',
+        'emptyCount >= 3',
+        'collapsedStatuses',
+        'visibleStatuses',
+        'emptyColumnDock',
+        'empty-columns-dock',
+        'data-reveal-column',
+        'data-show-empty-columns',
+        'data-focus-empty-columns',
+        'expandedEmptyStatuses',
+        'emptyColumnFocusDisabled',
+        "document.dispatchEvent(new CustomEvent('kanban:open-task-create'",
+        "root.style.setProperty('--kanban-column-count'",
+    ]:
+        assert phrase in board
+
+    for key in ['emptyColumnsCollapsed', 'emptyColumnsCollapsedHint', 'collapsedEmptyColumns', 'showEmptyColumns', 'focusNonEmptyColumns', 'showColumn']:
+        assert key in i18n
+
+    for phrase in [
+        '.empty-columns-dock',
+        '.collapsed-column-list',
+        '.collapsed-column-chip',
+        '.collapsed-column-reveal',
+        '.column-nav-button.is-collapsed-empty',
+        '.column-nav-button.show-empty-columns',
+        '.collapsed-column-reveal:focus-visible',
+    ]:
+        assert phrase in style
+
+
 def test_kpi_row_uses_dynamic_status_count_when_archived_is_visible():
     root = Path(__file__).resolve().parents[1]
     style = (root / 'static' / 'style.css').read_text(encoding='utf-8')

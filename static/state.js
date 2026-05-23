@@ -1,9 +1,11 @@
-export const queryBoard = new URLSearchParams(location.search).get('board') || '';
+export const queryParams = new URLSearchParams(location.search);
+export const queryBoard = queryParams.get('board') || '';
+export const querySearch = queryParams.get('q') || '';
 
 export const state = {
   board: queryBoard || localStorage.getItem('kanbanBoard') || 'default',
   includeArchived: false,
-  query: '',
+  query: querySearch,
   assignee: '',
   latestEventId: 0,
   data: null,
