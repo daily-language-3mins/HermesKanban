@@ -246,7 +246,7 @@ def test_unassigned_tasks_are_visually_flagged():
         'missing-assignee-chip',
         'profile-missing-badge',
         "data-assignee-state=\"${isUnassigned ? 'missing' : 'assigned'}\"",
-        "task.status}${isUnassigned ? ' is-unassigned' : ''}",
+        "safeStatus}${isUnassigned ? ' is-unassigned' : ''}",
     ]:
         assert phrase in board
     for key in ['profileMissing', 'profileMissingShort']:
@@ -445,3 +445,38 @@ def test_blueprint_dependency_ports_create_links_from_board():
     assert '.dependency-preview-edge' in style
     for key in ['parentPortHint', 'childPortHint', 'linkCreatedToast', 'linkInvalidToast']:
         assert key in i18n
+
+
+def test_board_polish_improves_card_scanability_and_accessibility():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    assert 'aria-label="切換語言"' in index
+    for phrase in [
+        'const safeStatus = safeStatusClass(task.status);',
+        'const statusLabel = escapeHtml(t(task.status));',
+        'const cardAriaLabel',
+        'aria-label="${cardAriaLabel}"',
+        'class="task-status-pill ${safeStatus}"',
+        'class="task-drag-hint"',
+        'task-card-title',
+        'task-card-preview',
+        'empty-column-card',
+        'addTaskToColumn',
+        'if (ev.target !== el) return;',
+    ]:
+        assert phrase in board
+    for key in ['openTaskHint', 'dragTaskHint', 'taskStatusLabel', 'emptyColumnHint', 'addTaskToColumn', 'languageToggle']:
+        assert key in i18n
+    for phrase in [
+        '.task-card:focus-visible',
+        '.button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, .mini-add:focus-visible, .column-nav-button:focus-visible',
+        '.task-status-pill',
+        '.task-drag-hint',
+        '.empty-column-card',
+        '-webkit-line-clamp: 3;',
+    ]:
+        assert phrase in style
