@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -20,6 +21,11 @@ REMOTE = "origin"
 BRANCH = "main"
 REMOTE_REF = f"{REMOTE}/{BRANCH}"
 COMMAND_TIMEOUT_SECONDS = 20
+UPDATE_STATUS_CACHE_TTL_SECONDS = 300
+UPDATE_STATUS_FETCH_TIMEOUT_SECONDS = 2
+
+_update_status_cache_lock = threading.Lock()
+_update_status_cache: dict[str, object] = {}
 
 
 class UpdateError(RuntimeError):
@@ -103,7 +109,13 @@ def local_git_info(repo: Path = ROOT_DIR) -> dict:
     return {"available": True, "branch": branch, "commit": commit, "short": _short(commit), "dirty": dirty}
 
 
-def get_update_status(repo: Path = ROOT_DIR, *, fetch: bool = True, max_commits: int = 8) -> dict:
+def get_update_status(
+    repo: Path = ROOT_DIR,
+    *,
+    fetch: bool = True,
+    max_commits: int = 8,
+    fetch_timeout: int = 60,
+) -> dict:
     """Check whether fixed ``origin/main`` can be fast-forwarded safely."""
     repo = Path(repo)
     try:
@@ -111,7 +123,7 @@ def get_update_status(repo: Path = ROOT_DIR, *, fetch: bool = True, max_commits:
         if inside != "true":
             raise UpdateUnavailable("not a git worktree")
         if fetch:
-            _run_git(repo, "fetch", "--quiet", REMOTE, BRANCH, timeout=60)
+            _run_git(repo, "fetch", "--quiet", REMOTE, BRANCH, timeout=fetch_timeout)
 
         current_branch = _current_branch(repo)
         current_commit = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -163,6 +175,83 @@ def get_update_status(repo: Path = ROOT_DIR, *, fetch: bool = True, max_commits:
         "blocked_reason": blocked_reason,
         "commits": commits,
     }
+
+
+def clear_update_status_cache() -> None:
+    """Clear the process-local update status cache (used by tests and update apply)."""
+    with _update_status_cache_lock:
+        _update_status_cache.clear()
+
+
+def _cache_age_seconds(now: float, checked_at: float) -> int:
+    return max(0, int(now - checked_at))
+
+
+def _copy_cached_status(status: dict, *, now: float, checked_at: float, cached: bool, stale: bool) -> dict:
+    payload = dict(status)
+    payload["cached"] = cached
+    payload["stale"] = stale
+    payload["age_seconds"] = _cache_age_seconds(now, checked_at)
+    if not stale:
+        payload.pop("unknown", None)
+        payload.pop("refresh_error", None)
+    return payload
+
+
+def get_cached_update_status(
+    repo: Path = ROOT_DIR,
+    *,
+    now_fn: Callable[[], float] = time.monotonic,
+    ttl_seconds: int = UPDATE_STATUS_CACHE_TTL_SECONDS,
+    fetch_timeout: int = UPDATE_STATUS_FETCH_TIMEOUT_SECONDS,
+    max_commits: int = 8,
+    status_getter: Callable[..., dict] = get_update_status,
+) -> dict:
+    """Return update status with a short-lived process cache and bounded remote fetch.
+
+    The WebUI calls this endpoint on page load and visibility changes. Holding the
+    lock through refresh deliberately coalesces concurrent requests so only one
+    request pays the ``git fetch`` cost. If refresh fails and a previous good
+    result exists, return it as stale/unknown instead of surfacing a hard error.
+    """
+    repo = Path(repo)
+    repo_key = str(repo.resolve()) if repo.exists() else str(repo)
+    now = now_fn()
+    with _update_status_cache_lock:
+        cached_status = _update_status_cache.get("status")
+        checked_raw = _update_status_cache.get("checked_at", 0.0)
+        checked_at = checked_raw if isinstance(checked_raw, (int, float)) else 0.0
+        cached_repo = _update_status_cache.get("repo")
+        if isinstance(cached_status, dict) and cached_repo == repo_key:
+            age = now - checked_at
+            if age <= ttl_seconds:
+                return _copy_cached_status(cached_status, now=now, checked_at=checked_at, cached=True, stale=False)
+
+        status = status_getter(repo=repo, fetch=True, max_commits=max_commits, fetch_timeout=fetch_timeout)
+        if status.get("ok"):
+            stored = dict(status)
+            stored.pop("cached", None)
+            stored.pop("stale", None)
+            stored.pop("unknown", None)
+            stored.pop("refresh_error", None)
+            _update_status_cache.update({"repo": repo_key, "status": stored, "checked_at": now})
+            return _copy_cached_status(stored, now=now, checked_at=now, cached=False, stale=False)
+
+        reason = str(status.get("reason") or "update status is unavailable")
+        if isinstance(cached_status, dict) and cached_repo == repo_key:
+            stale_payload = _copy_cached_status(cached_status, now=now, checked_at=checked_at, cached=True, stale=True)
+            stale_payload["unknown"] = True
+            stale_payload["refresh_error"] = reason
+            return stale_payload
+
+        payload = dict(status)
+        payload.setdefault("ok", False)
+        payload.setdefault("enabled", False)
+        payload["unknown"] = True
+        payload["cached"] = False
+        payload["stale"] = False
+        payload["age_seconds"] = 0
+        return payload
 
 
 def _run_uv_sync(repo: Path) -> dict:
@@ -217,6 +306,7 @@ def apply_update(
     _run_git(repo, "pull", "--ff-only", REMOTE, BRANCH, timeout=60)
     new_commit = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
     sync_result = sync_runner(repo)
+    clear_update_status_cache()
     restart_scheduler()
     return {
         "ok": True,

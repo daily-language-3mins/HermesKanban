@@ -52,7 +52,10 @@ function showUpdateDialog(elements, status) {
   if (elements.remote) elements.remote.textContent = `origin/main ${status.remote_short || ''}`.trim();
   renderCommitList(elements, status.commits || []);
   elements.apply.disabled = !status.can_update;
-  setStatusText(elements, status.can_update ? t('updateAvailable') : `${t('updateBlocked')}: ${status.blocked_reason || ''}`);
+  const message = status.stale || status.unknown
+    ? `${t('updateStatusStale')}${status.refresh_error ? `: ${status.refresh_error}` : ''}`
+    : (status.can_update ? t('updateAvailable') : `${t('updateBlocked')}: ${status.blocked_reason || ''}`);
+  setStatusText(elements, message);
   if (!elements.dialog.open) elements.dialog.showModal();
 }
 
