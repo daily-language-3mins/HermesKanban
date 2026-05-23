@@ -262,6 +262,117 @@ def test_workflow_draft_rejects_wrong_board_access_and_apply(client, monkeypatch
     assert other_board.json()["tasks"] == []
 
 
+def test_workflow_draft_delete_requires_board_ownership_and_cleans_files(client, monkeypatch):
+    _patch_profiles(monkeypatch)
+    _patch_planner(monkeypatch)
+
+    created_board = client.post('/api/boards', json={'slug': 'other', 'name': 'Other'})
+    assert created_board.status_code == 200, created_board.text
+    create = client.post(
+        "/api/workflows/drafts?board=default",
+        json={
+            "prompt": "삭제할 workflow draft",
+            "attachments": [{"filename": "cleanup.md", "content": "cleanup body"}],
+        },
+    )
+    assert create.status_code == 200, create.text
+    draft = create.json()["draft"]
+    draft_id = draft["draft_id"]
+    attachment_path = draft["attachments"][0]["path"]
+
+    from pathlib import Path
+
+    draft_path = Path(attachment_path).parents[1]
+    assert Path(attachment_path).is_file()
+    assert draft_path.is_dir()
+
+    wrong_board = client.delete(f"/api/workflows/drafts/{draft_id}?board=other")
+    assert wrong_board.status_code == 404
+    assert Path(attachment_path).is_file()
+    assert draft_path.is_dir()
+
+    deleted = client.delete(f"/api/workflows/drafts/{draft_id}?board=default")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["action"] == "deleted"
+    assert not Path(attachment_path).exists()
+    assert not draft_path.exists()
+
+    missing = client.get(f"/api/workflows/drafts/{draft_id}?board=default")
+    assert missing.status_code == 404
+
+
+def test_workflow_draft_delete_applied_requires_force_and_archive_moves_files(client, monkeypatch):
+    _patch_profiles(monkeypatch)
+    _patch_planner(monkeypatch)
+
+    create = client.post(
+        "/api/workflows/drafts?board=default",
+        json={
+            "prompt": "적용 후 삭제할 workflow draft",
+            "attachments": [{"filename": "applied.md", "content": "applied body"}],
+        },
+    )
+    assert create.status_code == 200, create.text
+    draft = create.json()["draft"]
+    draft_id = draft["draft_id"]
+    attachment_path = draft["attachments"][0]["path"]
+
+    from pathlib import Path
+
+    draft_path = Path(attachment_path).parents[1]
+    applied = client.post(
+        f"/api/workflows/drafts/{draft_id}/instantiate?board=default",
+        json={"instance_id": "wf_delete_guard"},
+    )
+    assert applied.status_code == 200, applied.text
+
+    refused = client.delete(f"/api/workflows/drafts/{draft_id}?board=default")
+    assert refused.status_code == 409
+    assert Path(attachment_path).is_file()
+    assert draft_path.is_dir()
+
+    archived = client.delete(f"/api/workflows/drafts/{draft_id}?board=default&archive=true")
+    assert archived.status_code == 200, archived.text
+    payload = archived.json()
+    assert payload["action"] == "archived"
+    archive_path = Path(payload["archive_path"])
+    assert not draft_path.exists()
+    assert (archive_path / "draft.json").is_file()
+    assert (archive_path / "attachments" / "applied.md").is_file()
+
+
+def test_workflow_draft_force_delete_applied_cleans_files(client, monkeypatch):
+    _patch_profiles(monkeypatch)
+    _patch_planner(monkeypatch)
+
+    create = client.post(
+        "/api/workflows/drafts?board=default",
+        json={
+            "prompt": "강제 삭제할 workflow draft",
+            "attachments": [{"filename": "force.md", "content": "force body"}],
+        },
+    )
+    assert create.status_code == 200, create.text
+    draft = create.json()["draft"]
+    draft_id = draft["draft_id"]
+    attachment_path = draft["attachments"][0]["path"]
+
+    from pathlib import Path
+
+    draft_path = Path(attachment_path).parents[1]
+    applied = client.post(
+        f"/api/workflows/drafts/{draft_id}/instantiate?board=default",
+        json={"instance_id": "wf_force_delete"},
+    )
+    assert applied.status_code == 200, applied.text
+
+    deleted = client.delete(f"/api/workflows/drafts/{draft_id}?board=default&force=true")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["action"] == "deleted"
+    assert not Path(attachment_path).exists()
+    assert not draft_path.exists()
+
+
 def test_workflow_draft_cannot_apply_when_proposal_is_not_applyable(client, monkeypatch):
     _patch_profiles(monkeypatch)
     from kanban_webui import workflow_planner

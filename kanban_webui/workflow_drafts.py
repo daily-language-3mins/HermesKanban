@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import shutil
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -40,6 +41,10 @@ def validate_draft_id(draft_id: str) -> str:
 
 def drafts_root(settings: Settings) -> Path:
     return settings.state_dir / "workflow-drafts"
+
+
+def archived_drafts_root(settings: Settings) -> Path:
+    return settings.state_dir / "workflow-drafts-archive"
 
 
 def draft_dir(settings: Settings, draft_id: str) -> Path:
@@ -376,6 +381,53 @@ def mark_applied(settings: Settings, draft: dict[str, Any], *, instance_id: str,
     draft["apply_result"] = result
     save_draft(settings, draft)
     return draft
+
+
+def remove_draft(
+    settings: Settings,
+    draft: dict[str, Any],
+    *,
+    archive: bool = False,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Delete or archive a workflow draft directory and its attachments.
+
+    Drafts are stored as one directory containing draft.json and an attachments/
+    subdirectory. Removing the directory is therefore the authoritative cleanup
+    operation for both metadata and uploaded attachment files.
+    """
+    draft_id = validate_draft_id(str(draft.get("draft_id") or ""))
+    source = draft_dir(settings, draft_id)
+    if draft.get("status") == "applied" and not archive and not force:
+        raise DraftError("applied workflow drafts require force=true for hard delete")
+    if not source.exists():
+        raise FileNotFoundError(draft_id)
+
+    if archive:
+        now = int(time.time())
+        target_root = archived_drafts_root(settings)
+        target_root.mkdir(parents=True, exist_ok=True)
+        target = target_root / f"{draft_id}-{now}"
+        suffix = 2
+        while target.exists():
+            target = target_root / f"{draft_id}-{now}-{suffix}"
+            suffix += 1
+        archived = deepcopy(draft)
+        archived["status"] = "archived"
+        archived["updated_at"] = now
+        archived["archived_at"] = now
+        archived["archived_from_status"] = draft.get("status") or "draft"
+        save_draft(settings, archived)
+        shutil.move(str(source), str(target))
+        return {
+            "action": "archived",
+            "draft_id": draft_id,
+            "archive_path": str(target),
+            "deleted_path": str(source),
+        }
+
+    shutil.rmtree(source)
+    return {"action": "deleted", "draft_id": draft_id, "deleted_path": str(source)}
 
 
 def steps_for_instantiation(draft: dict[str, Any]) -> list[dict[str, Any]]:
