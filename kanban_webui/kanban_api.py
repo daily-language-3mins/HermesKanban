@@ -648,7 +648,7 @@ def _task_detail(conn, task_id: str, *, board: str) -> dict[str, Any]:
 def get_config() -> dict[str, Any]:
     return {
         "service": "kanban-webui",
-        "default_language": "ko",
+        "default_language": "zh-Hant",
         "columns": BOARD_COLUMNS,
         "archived_column": "archived",
         "dangerous_statuses": ["blocked", "done", "archived"],
