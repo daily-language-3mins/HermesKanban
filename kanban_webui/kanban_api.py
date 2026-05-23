@@ -663,7 +663,7 @@ def get_service_status() -> dict[str, Any]:
 
 @router.get("/app/update-status")
 def get_app_update_status() -> dict[str, Any]:
-    return app_update.get_update_status()
+    return app_update.get_cached_update_status()
 
 
 @router.post("/app/update")

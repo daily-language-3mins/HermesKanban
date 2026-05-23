@@ -191,7 +191,100 @@ def test_apply_update_rejects_dirty_worktree(git_pair: GitPair):
     assert "uncommitted" in str(exc.value)
 
 
-def test_update_status_endpoint_returns_update_payload(client, monkeypatch):
+def test_cached_update_status_reuses_fresh_fetch_result(tmp_path: Path):
+    from kanban_webui import app_update
+
+    app_update.clear_update_status_cache()
+    calls: list[dict] = []
+    payload = {"ok": True, "enabled": True, "update_available": False}
+
+    def status_getter(**kwargs):
+        calls.append(kwargs)
+        return payload
+
+    first = app_update.get_cached_update_status(
+        repo=tmp_path,
+        now_fn=lambda: 100.0,
+        ttl_seconds=300,
+        fetch_timeout=1,
+        status_getter=status_getter,
+    )
+    second = app_update.get_cached_update_status(
+        repo=tmp_path,
+        now_fn=lambda: 120.0,
+        ttl_seconds=300,
+        fetch_timeout=1,
+        status_getter=status_getter,
+    )
+
+    assert first["cached"] is False
+    assert first["stale"] is False
+    assert second["cached"] is True
+    assert second["stale"] is False
+    assert second["age_seconds"] == 20
+    assert calls == [{"repo": tmp_path, "fetch": True, "max_commits": 8, "fetch_timeout": 1}]
+
+
+def test_cached_update_status_returns_stale_payload_when_refresh_fails(tmp_path: Path):
+    from kanban_webui import app_update
+
+    app_update.clear_update_status_cache()
+    calls = 0
+
+    def status_getter(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"ok": True, "enabled": True, "update_available": True, "remote_short": "abc1234"}
+        return {"ok": False, "enabled": False, "reason": "git command timed out"}
+
+    fresh = app_update.get_cached_update_status(
+        repo=tmp_path,
+        now_fn=lambda: 100.0,
+        ttl_seconds=10,
+        fetch_timeout=1,
+        status_getter=status_getter,
+    )
+    stale = app_update.get_cached_update_status(
+        repo=tmp_path,
+        now_fn=lambda: 115.0,
+        ttl_seconds=10,
+        fetch_timeout=1,
+        status_getter=status_getter,
+    )
+
+    assert fresh["cached"] is False
+    assert stale["ok"] is True
+    assert stale["cached"] is True
+    assert stale["stale"] is True
+    assert stale["unknown"] is True
+    assert stale["remote_short"] == "abc1234"
+    assert stale["refresh_error"] == "git command timed out"
+    assert stale["age_seconds"] == 15
+
+
+def test_cached_update_status_surfaces_unknown_when_no_cache_exists(tmp_path: Path):
+    from kanban_webui import app_update
+
+    app_update.clear_update_status_cache()
+
+    status = app_update.get_cached_update_status(
+        repo=tmp_path,
+        now_fn=lambda: 100.0,
+        ttl_seconds=10,
+        fetch_timeout=1,
+        status_getter=lambda **kwargs: {"ok": False, "enabled": False, "reason": "git command timed out"},
+    )
+
+    assert status["ok"] is False
+    assert status["enabled"] is False
+    assert status["unknown"] is True
+    assert status["cached"] is False
+    assert status["stale"] is False
+    assert status["reason"] == "git command timed out"
+
+
+def test_update_status_endpoint_returns_cached_update_payload(client, monkeypatch):
     from kanban_webui import kanban_api
 
     payload = {
@@ -201,8 +294,10 @@ def test_update_status_endpoint_returns_update_payload(client, monkeypatch):
         "can_update": True,
         "current_short": "940e789",
         "remote_short": "abc1234",
+        "cached": False,
+        "stale": False,
     }
-    monkeypatch.setattr(kanban_api.app_update, "get_update_status", lambda: payload)
+    monkeypatch.setattr(kanban_api.app_update, "get_cached_update_status", lambda: payload)
 
     response = client.get("/api/app/update-status")
 
