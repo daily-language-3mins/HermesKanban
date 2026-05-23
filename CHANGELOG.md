@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation now reflects the current Traditional Chinese (`zh-Hant`)
+  default UI language, with English available from the language toggle.
+
 ### Planned
 
 - Package-data based install support for `uv tool`/`pipx` once the runtime layout is stabilized.
@@ -17,7 +22,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 
 - Standalone Hermes KanbanWebUI FastAPI service.
-- Trello-style board UI with Korean default UI and English toggle.
+- Trello-style board UI with localized labels and English toggle.
 - Board CRUD/switching, task creation, bulk creation, filtering, and drag-and-drop status changes.
 - Task detail drawer, comments, events, runs, markdown rendering, and Live Run Monitor endpoints.
 - Existing Hermes `hermes_cli.kanban_db` integration as the single source of truth.

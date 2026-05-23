@@ -14,7 +14,7 @@ KanbanWebUI uses an Expo-inspired clean operations cockpit:
 - Inter for UI, JetBrains Mono for ids/logs
 - Trello-like horizontal columns on desktop
 - mobile focused-column carousel with bottom drawer
-- Korean labels by default, English toggle in the top bar
+- Traditional Chinese (`zh-Hant`) labels by default, English toggle in the top bar
 
 This file is intentionally small and project-local. The source inspiration was
 `awesome-design-md` catalog slug `expo`; CSS tokens live in

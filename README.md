@@ -67,7 +67,8 @@ Kanban data:
   parent-child dependencies.
 - Workflow draft storage, board-scoped draft APIs, immutable applied drafts, and
   backend guards that prevent non-applyable AI proposals from being applied.
-- Korean UI by default with an English toggle, plus light/dark themes.
+- Traditional Chinese (`zh-Hant`) UI by default with an English toggle and
+  optional Korean translation, plus light/dark themes.
 - Optional token auth for `/api/*` endpoints.
 - Loopback-first runtime with Host-header and cross-origin mutation checks for
   safer localhost/Tailscale usage.
