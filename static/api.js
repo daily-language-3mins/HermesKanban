@@ -59,6 +59,7 @@ export const api = {
   task: (board, id) => request(`/api/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ board })}`),
   updateTask: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}?${new URLSearchParams({ board })}`, { method: 'PATCH', body: payload }),
   cancelTask: (board, id, payload = {}) => request(`/api/tasks/${encodeURIComponent(id)}/cancel?${new URLSearchParams({ board, confirm: 'cancel' })}`, { method: 'POST', body: payload }),
+  reorderTask: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}/reorder?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
   comment: (board, id, payload) => request(`/api/tasks/${encodeURIComponent(id)}/comments?${new URLSearchParams({ board })}`, { method: 'POST' , body: payload }),
   linkTask: (board, payload) => request(`/api/links?${new URLSearchParams({ board })}`, { method: 'POST', body: payload }),
   unlinkTask: (board, parentId, childId) => request(`/api/links?${new URLSearchParams({ board, parent_id: parentId, child_id: childId })}`, { method: 'DELETE' }),

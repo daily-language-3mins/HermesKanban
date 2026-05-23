@@ -28,6 +28,7 @@ from .operations import build_operations_summary
 router = APIRouter(prefix="/api")
 
 BOARD_COLUMNS = ["triage", "todo", "ready", "running", "blocked", "done"]
+ORDERABLE_COLUMNS = BOARD_COLUMNS + ["archived"]
 INITIAL_TASK_STATUSES = {"ready", "todo", "triage"}
 UPDATE_TASK_STATUSES = {"done", "blocked", "ready", "archived", "todo", "triage", "running"}
 WRITEABLE_TASK_FIELDS = {
@@ -42,6 +43,169 @@ WRITEABLE_TASK_FIELDS = {
     "current_step_key",
     "skills",
 }
+
+
+ORDER_RANK_GAP = 1000.0
+
+
+def _task_sort_fallback(task) -> tuple[int, int, str]:
+    return (-int(getattr(task, "priority", 0) or 0), int(getattr(task, "created_at", 0) or 0), str(getattr(task, "id", "")))
+
+
+def _ensure_order_table(conn) -> None:
+    with kanban_db.write_txn(conn):
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS webui_task_order (
+                task_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                rank REAL NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_webui_task_order_status_rank ON webui_task_order(status, rank)")
+
+
+def _fetch_order_rows(conn, task_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
+    ids = list(task_ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    return {
+        row["task_id"]: {"status": row["status"], "rank": float(row["rank"])}
+        for row in conn.execute(
+            f"SELECT task_id, status, rank FROM webui_task_order WHERE task_id IN ({placeholders})",
+            ids,
+        ).fetchall()
+    }
+
+
+def _backfill_order_rows(conn, tasks: Iterable[Any]) -> dict[str, dict[str, Any]]:
+    task_list = list(tasks)
+    _ensure_order_table(conn)
+    rows = _fetch_order_rows(conn, [task.id for task in task_list])
+    now = int(time.time())
+    missing_by_status: dict[str, list[Any]] = {}
+    for task in task_list:
+        existing = rows.get(task.id)
+        if existing and existing["status"] == task.status:
+            continue
+        missing_by_status.setdefault(task.status, []).append(task)
+
+    if missing_by_status:
+        with kanban_db.write_txn(conn):
+            for status_value, status_tasks in missing_by_status.items():
+                max_rank_row = conn.execute(
+                    "SELECT COALESCE(MAX(rank), 0) AS max_rank FROM webui_task_order WHERE status = ?",
+                    (status_value,),
+                ).fetchone()
+                rank = float(max_rank_row["max_rank"] or 0.0)
+                for task in sorted(status_tasks, key=_task_sort_fallback):
+                    rank += ORDER_RANK_GAP
+                    conn.execute(
+                        """
+                        INSERT INTO webui_task_order(task_id, status, rank, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(task_id) DO UPDATE SET
+                            status = excluded.status,
+                            rank = excluded.rank,
+                            updated_at = excluded.updated_at
+                        """,
+                        (task.id, status_value, rank, now),
+                    )
+        rows = _fetch_order_rows(conn, [task.id for task in task_list])
+    return rows
+
+
+def _ordered_tasks(conn, tasks: Iterable[Any]) -> list[Any]:
+    task_list = list(tasks)
+    rows = _backfill_order_rows(conn, task_list)
+    column_index = {status: index for index, status in enumerate(ORDERABLE_COLUMNS)}
+
+    def sort_key(task) -> tuple[int, float, tuple[int, int, str]]:
+        order_row = rows.get(task.id) or {"rank": ORDER_RANK_GAP}
+        return (column_index.get(task.status, len(column_index)), float(order_row["rank"]), _task_sort_fallback(task))
+
+    return sorted(task_list, key=sort_key)
+
+
+def _ordered_status_rows(conn, status: str, *, exclude_task_id: Optional[str] = None) -> list[dict[str, Any]]:
+    _ensure_order_table(conn)
+    params: list[Any] = [status]
+    sql = "SELECT task_id, rank FROM webui_task_order WHERE status = ?"
+    if exclude_task_id:
+        sql += " AND task_id != ?"
+        params.append(exclude_task_id)
+    sql += " ORDER BY rank ASC, task_id ASC"
+    return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+
+def _renormalize_status_order(conn, status: str, *, exclude_task_id: Optional[str] = None) -> None:
+    rows = _ordered_status_rows(conn, status, exclude_task_id=exclude_task_id)
+    now = int(time.time())
+    with kanban_db.write_txn(conn):
+        for index, row in enumerate(rows, start=1):
+            conn.execute(
+                "UPDATE webui_task_order SET rank = ?, updated_at = ? WHERE task_id = ?",
+                (index * ORDER_RANK_GAP, now, row["task_id"]),
+            )
+
+
+def _rank_for_insert(conn, status: str, *, before_id: Optional[str] = None, after_id: Optional[str] = None, moving_id: Optional[str] = None) -> float:
+    if before_id and before_id == moving_id:
+        raise HTTPException(status_code=400, detail="before_id cannot be the moved task")
+    if after_id and after_id == moving_id:
+        raise HTTPException(status_code=400, detail="after_id cannot be the moved task")
+
+    def compute() -> float | None:
+        rows = _ordered_status_rows(conn, status, exclude_task_id=moving_id)
+        by_id = {row["task_id"]: (idx, float(row["rank"])) for idx, row in enumerate(rows)}
+        if before_id and before_id not in by_id:
+            raise HTTPException(status_code=400, detail="before_id must refer to a task in the target status")
+        if after_id and after_id not in by_id:
+            raise HTTPException(status_code=400, detail="after_id must refer to a task in the target status")
+        if not rows:
+            return ORDER_RANK_GAP
+        lower: Optional[float] = None
+        upper: Optional[float] = None
+        if after_id:
+            after_index, lower = by_id[after_id]
+        if before_id:
+            before_index, upper = by_id[before_id]
+        if before_id and after_id and after_index >= before_index:
+            raise HTTPException(status_code=400, detail="after_id must come before before_id in the target status")
+        if lower is not None and upper is not None:
+            return (lower + upper) / 2.0 if upper > lower else None
+        if upper is not None:
+            return upper - ORDER_RANK_GAP
+        if lower is not None:
+            return lower + ORDER_RANK_GAP
+        return float(rows[-1]["rank"]) + ORDER_RANK_GAP
+
+    rank = compute()
+    if rank is None or rank in (float("inf"), float("-inf")) or rank != rank:
+        _renormalize_status_order(conn, status, exclude_task_id=moving_id)
+        rank = compute()
+    if rank is None or rank in (float("inf"), float("-inf")) or rank != rank:
+        raise HTTPException(status_code=409, detail="could not compute a stable task rank")
+    return float(rank)
+
+
+def _set_task_order_rank(conn, task_id: str, status: str, rank: float) -> None:
+    _ensure_order_table(conn)
+    with kanban_db.write_txn(conn):
+        conn.execute(
+            """
+            INSERT INTO webui_task_order(task_id, status, rank, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(task_id) DO UPDATE SET
+                status = excluded.status,
+                rank = excluded.rank,
+                updated_at = excluded.updated_at
+            """,
+            (task_id, status, rank, int(time.time())),
+        )
 
 
 class CreateBoardBody(BaseModel):
@@ -138,6 +302,16 @@ class UpdateTaskBody(BaseModel):
     skills: Optional[list[str]] = None
     workflow_template_id: Optional[str] = None
     current_step_key: Optional[str] = None
+    result: Optional[str] = None
+    summary: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+    block_reason: Optional[str] = None
+
+
+class ReorderTaskBody(BaseModel):
+    status: str
+    before_id: Optional[str] = None
+    after_id: Optional[str] = None
     result: Optional[str] = None
     summary: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
@@ -1040,13 +1214,19 @@ def board_view(
         try:
             tasks = kanban_db.list_tasks(
                 conn,
-                assignee=assignee,
-                status=status,
-                tenant=tenant,
                 include_archived=include_archived,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        tasks = _ordered_tasks(conn, tasks)
+        if assignee:
+            tasks = [task for task in tasks if task.assignee == assignee]
+        if status:
+            if status not in UPDATE_TASK_STATUSES:
+                raise HTTPException(status_code=400, detail=f"unknown status {status!r}")
+            tasks = [task for task in tasks if task.status == status]
+        if tenant:
+            tasks = [task for task in tasks if task.tenant == tenant]
         if q:
             needle = q.casefold()
             tasks = [
@@ -1082,8 +1262,11 @@ def board_view(
         if include_archived:
             columns["archived"] = []
         rows = []
+        order_rows = _fetch_order_rows(conn, [task.id for task in tasks])
         for task in tasks:
             item = task_dict(task, include_body=False)
+            if task.id in order_rows:
+                item["webui_rank"] = order_rows[task.id]["rank"]
             item["link_counts"] = link_counts.get(task.id, {"parents": 0, "children": 0})
             item["comment_count"] = comment_counts.get(task.id, 0)
             item["progress"] = progress.get(task.id)
@@ -1217,6 +1400,49 @@ def get_task(task_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]
 @router.get("/tasks/{task_id}/raw")
 def get_task_raw(task_id: str, board: Optional[str] = Query(None)) -> dict[str, Any]:
     return get_task(task_id, board=board)
+
+
+@router.post("/tasks/{task_id}/reorder")
+def reorder_task(task_id: str, payload: ReorderTaskBody, board: Optional[str] = Query(None)) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    target_status = payload.status.strip()
+    if target_status not in ORDERABLE_COLUMNS:
+        raise HTTPException(status_code=400, detail=f"reorder target status must be one of {ORDERABLE_COLUMNS}")
+    if target_status == "running":
+        raise HTTPException(status_code=400, detail="use /claim or dispatcher to move a task to running")
+    if target_status == "blocked" and not str(payload.block_reason or "").strip():
+        raise HTTPException(status_code=400, detail="block_reason is required when reordering to blocked")
+    conn = kanban_db.connect(board=selected)
+    try:
+        task = kanban_db.get_task(conn, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        all_tasks = kanban_db.list_tasks(conn, include_archived=True)
+        _ordered_tasks(conn, all_tasks)
+        update_payload = UpdateTaskBody(
+            status=target_status,
+            result=payload.result,
+            summary=payload.summary,
+            metadata=payload.metadata,
+            block_reason=payload.block_reason,
+        )
+        updated_task = _apply_task_update(conn, task_id, update_payload)
+        # Status transitions such as moving a task to ready can recompute other tasks;
+        # backfill again before validating neighbor placement in the final column.
+        all_tasks = kanban_db.list_tasks(conn, include_archived=True)
+        _ordered_tasks(conn, all_tasks)
+        rank = _rank_for_insert(
+            conn,
+            target_status,
+            before_id=payload.before_id,
+            after_id=payload.after_id,
+            moving_id=task_id,
+        )
+        _set_task_order_rank(conn, task_id, target_status, rank)
+        latest = kanban_db.get_task(conn, task_id)
+        return {"task": task_dict(latest) if latest else updated_task, "board": selected, "rank": rank}
+    finally:
+        conn.close()
 
 
 @router.patch("/tasks/{task_id}")
