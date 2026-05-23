@@ -319,6 +319,14 @@ The old built-in workflow template API is deprecated and returns `410 Gone`; pro
 - `GET /api/stats`, `GET /api/assignees`
 - `POST /api/dispatch` (`dry_run=true` by default; non-dry-run requires
   `confirm=dispatch`)
+- `POST /api/tasks/{task_id}/cancel` (alias: `/reclaim`) requires
+  `confirm=cancel`. This is a conservative worker stop control: it delegates to
+  Hermes core `kanban_db.reclaim_task`, releases the running claim, closes the
+  active run with outcome `reclaimed`, records a `reclaimed` task event, and
+  returns the task to `ready`. KanbanWebUI never kills arbitrary PIDs itself; any
+  host-local worker termination is performed only by the core reclaim API's own
+  safety checks. If the installed core does not provide `reclaim_task`, the API
+  returns `501` instead of exposing unsafe cancellation.
 - `POST /api/gc` requires `confirm=gc`
 
 Retry backoff and `eligible_at`/`eligible_in_seconds` values shown by the

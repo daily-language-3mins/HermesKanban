@@ -4,7 +4,7 @@ from __future__ import annotations
 def test_cli_parity_registry_and_route_table(client):
     registry = client.get('/api/ui/registry').json()['cli_parity']
     cli_names = {row['cli'] for row in registry}
-    for expected in ['init', 'boards create', 'create', 'list', 'show', 'assign', 'claim', 'heartbeat', 'comment', 'complete', 'block', 'unblock', 'archive', 'tail/watch', 'runs', 'assignees', 'dispatch', 'stats', 'log', 'context', 'gc', 'daemon']:
+    for expected in ['init', 'boards create', 'create', 'list', 'show', 'assign', 'claim', 'heartbeat', 'reclaim', 'comment', 'complete', 'block', 'unblock', 'archive', 'tail/watch', 'runs', 'assignees', 'dispatch', 'stats', 'log', 'context', 'gc', 'daemon']:
         assert expected in cli_names
 
     route_apis = {row['api'] for row in registry}
