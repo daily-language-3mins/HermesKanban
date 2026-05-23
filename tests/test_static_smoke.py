@@ -156,7 +156,14 @@ def test_dark_mode_static_contract():
 def test_dragdrop_pointer_contract_strings():
     root = Path(__file__).resolve().parents[1]
     dragdrop = (root / 'static' / 'dragdrop.js').read_text(encoding='utf-8')
+    api = (root / 'static' / 'api.js').read_text(encoding='utf-8')
     for phrase in ['pointerdown', 'setPointerCapture', 'drag threshold', 'drop placeholder', 'autoScrollBoard', 'moveTask']:
+        assert phrase in dragdrop
+    for phrase in ['reorderTask', '/reorder']:
+        assert phrase in api
+    for phrase in ['reorderTask', 'before_id', 'after_id']:
+        assert phrase in dragdrop
+    for phrase in ['insertBefore', 'drop-placeholder']:
         assert phrase in dragdrop
 
 
