@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 
@@ -349,3 +350,108 @@ def test_workflow_draft_rejects_invalid_ai_proposal(client, monkeypatch):
     )
     assert response.status_code == 422
     assert "cycle" in response.text or "순환" in response.text
+
+
+def test_workflow_draft_list_is_board_scoped_searchable_and_lightweight(client, monkeypatch):
+    _patch_profiles(monkeypatch)
+    from kanban_webui import workflow_drafts
+    from kanban_webui.config import get_settings
+
+    proposals = [
+        _fake_proposal("Default newest draft"),
+        _fake_proposal("Default applied rollout"),
+        _fake_proposal("Other board draft"),
+    ]
+    _patch_planner(monkeypatch, proposal_factory=lambda: proposals.pop(0))
+
+    created_board = client.post('/api/boards', json={'slug': 'other', 'name': 'Other'})
+    assert created_board.status_code == 200, created_board.text
+
+    newest = client.post(
+        "/api/workflows/drafts?board=default",
+        json={
+            "prompt": "newest draft",
+            "attachments": [
+                {"filename": "secret.txt", "content": "large attachment body must not leak"}
+            ],
+        },
+    )
+    assert newest.status_code == 200, newest.text
+    applied = client.post("/api/workflows/drafts?board=default", json={"prompt": "applied draft"})
+    assert applied.status_code == 200, applied.text
+    other = client.post("/api/workflows/drafts?board=other", json={"prompt": "other draft"})
+    assert other.status_code == 200, other.text
+
+    settings = get_settings()
+    newest_draft = newest.json()["draft"]
+    applied_draft = applied.json()["draft"]
+    other_draft = other.json()["draft"]
+    newest_draft.update({"created_at": 300, "updated_at": 300})
+    workflow_drafts.save_draft(settings, newest_draft)
+    applied_draft.update(
+        {
+            "status": "applied",
+            "created_at": 200,
+            "updated_at": 250,
+            "applied_at": 250,
+            "applied_instance_id": "wf_applied_list",
+        }
+    )
+    workflow_drafts.save_draft(settings, applied_draft)
+    other_draft.update({"created_at": 400, "updated_at": 400})
+    workflow_drafts.save_draft(settings, other_draft)
+
+    listed = client.get("/api/workflows/drafts?board=default")
+    assert listed.status_code == 200, listed.text
+    payload = listed.json()
+    assert payload["board"] == "default"
+    assert payload["count"] == 2
+    summaries = payload["drafts"]
+    assert [item["draft_id"] for item in summaries] == [
+        newest_draft["draft_id"],
+        applied_draft["draft_id"],
+    ]
+    assert {item["board"] for item in summaries} == {"default"}
+    assert {item["status"] for item in summaries} == {"draft", "applied"}
+    applied_summary = next(item for item in summaries if item["status"] == "applied")
+    assert applied_summary["applied_at"] == 250
+    assert applied_summary["applied_instance_id"] == "wf_applied_list"
+    assert summaries[0]["proposal"] == {
+        "title": "Default newest draft",
+        "summary": "결제 기능을 조사, 구현, 검증으로 나눕니다.",
+    }
+    assert summaries[0]["planner_profile"] == "dev_plan"
+    assert summaries[0]["attachment_count"] == 1
+    assert "attachments" not in summaries[0]
+    assert "steps" not in summaries[0]["proposal"]
+    assert "large attachment body" not in json.dumps(payload, ensure_ascii=False)
+
+    searched = client.get("/api/workflows/drafts?board=default&q=rollout")
+    assert searched.status_code == 200, searched.text
+    assert [item["draft_id"] for item in searched.json()["drafts"]] == [applied_draft["draft_id"]]
+
+    other_listed = client.get("/api/workflows/drafts?board=other")
+    assert other_listed.status_code == 200, other_listed.text
+    assert [item["draft_id"] for item in other_listed.json()["drafts"]] == [other_draft["draft_id"]]
+
+
+def test_workflow_draft_list_skips_invalid_draft_files(client, monkeypatch):
+    _patch_profiles(monkeypatch)
+    _patch_planner(monkeypatch)
+    from kanban_webui import workflow_drafts
+    from kanban_webui.config import get_settings
+
+    create = client.post("/api/workflows/drafts?board=default", json={"prompt": "valid draft"})
+    assert create.status_code == 200, create.text
+    draft_id = create.json()["draft"]["draft_id"]
+
+    bad_dir = workflow_drafts.drafts_root(get_settings()) / "wfd_broken"
+    bad_dir.mkdir(parents=True)
+    (bad_dir / "draft.json").write_text("{not json", encoding="utf-8")
+
+    response = client.get("/api/workflows/drafts?board=default")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert [item["draft_id"] for item in payload["drafts"]] == [draft_id]
+    assert payload["invalid_drafts"]
+    assert payload["invalid_drafts"][0]["draft_id"] == "wfd_broken"

@@ -326,6 +326,76 @@ def load_draft(settings: Settings, draft_id: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def draft_summary(draft: dict[str, Any]) -> dict[str, Any]:
+    """Return the lightweight fields used by the board-scoped draft list."""
+    raw_proposal = draft.get("proposal")
+    proposal: dict[str, Any] = raw_proposal if isinstance(raw_proposal, dict) else {}
+    raw_attachments = draft.get("attachments")
+    attachments: list[Any] = raw_attachments if isinstance(raw_attachments, list) else []
+    return {
+        "draft_id": draft.get("draft_id"),
+        "board": draft.get("board"),
+        "status": draft.get("status") or "draft",
+        "revision": int(draft.get("revision") or 1),
+        "created_at": draft.get("created_at"),
+        "updated_at": draft.get("updated_at"),
+        "applied_at": draft.get("applied_at"),
+        "applied_instance_id": draft.get("applied_instance_id"),
+        "proposal": {
+            "title": proposal.get("title") or "",
+            "summary": proposal.get("summary") or "",
+        },
+        "planner_profile": draft.get("planner_profile"),
+        "attachment_count": len(attachments),
+    }
+
+
+def list_draft_summaries(
+    settings: Settings,
+    *,
+    board: str,
+    query: Optional[str] = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """List lightweight workflow draft summaries for a single board.
+
+    Malformed or unreadable draft files are skipped and returned as warnings so
+    one corrupt on-disk draft cannot break the board's draft list endpoint.
+    """
+    root = drafts_root(settings)
+    if not root.is_dir():
+        return [], []
+
+    needle = str(query or "").strip().lower()
+    summaries: list[dict[str, Any]] = []
+    warnings: list[dict[str, str]] = []
+    for path in root.glob("*/draft.json"):
+        draft_id = path.parent.name
+        try:
+            validate_draft_id(draft_id)
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise DraftError("draft.json must contain a JSON object")
+        except Exception as exc:
+            warnings.append({"draft_id": draft_id, "error": str(exc)})
+            continue
+        if raw.get("board") != board:
+            continue
+        summary = draft_summary(raw)
+        if needle and not _summary_matches(summary, needle):
+            continue
+        summaries.append(summary)
+
+    summaries.sort(
+        key=lambda item: (
+            _sort_timestamp(item.get("updated_at")),
+            _sort_timestamp(item.get("created_at")),
+            str(item.get("draft_id") or ""),
+        ),
+        reverse=True,
+    )
+    return summaries, warnings
+
+
 def save_draft(settings: Settings, draft: dict[str, Any]) -> None:
     target_dir = draft_dir(settings, draft["draft_id"])
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -448,6 +518,26 @@ def build_task_body(draft: dict[str, Any], step: dict[str, Any]) -> str:
 def _sanitize_filename(name: str) -> str:
     cleaned = FILENAME_SAFE_RE.sub("_", Path(name).name).strip(" .")
     return cleaned[:120] or "attachment.txt"
+
+
+def _sort_timestamp(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _summary_matches(summary: dict[str, Any], needle: str) -> bool:
+    raw_proposal = summary.get("proposal")
+    proposal: dict[str, Any] = raw_proposal if isinstance(raw_proposal, dict) else {}
+    haystacks = [
+        summary.get("draft_id"),
+        summary.get("status"),
+        summary.get("planner_profile"),
+        proposal.get("title"),
+        proposal.get("summary"),
+    ]
+    return any(needle in str(value or "").lower() for value in haystacks)
 
 
 def _dedupe_filename(name: str, used: set[str]) -> str:
