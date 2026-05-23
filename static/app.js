@@ -8,7 +8,7 @@ import { setupMobileFallback } from './mobile.js?v=20260522-zh-tw';
 import { setupAppUpdatePrompt } from './update.js?v=20260522-zh-tw';
 import { setupOperationsPanel, refreshOperationsPanel } from './operations.js?v=20260522-zh-tw';
 import { closeDrawer } from './drawer.js?v=20260522-zh-tw';
-import { state, setBoard, toast } from './state.js?v=20260522-zh-tw';
+import { state, setBoard, toast, queryBoard } from './state.js?v=20260522-zh-tw';
 
 async function loadBoards() {
   const data = await api.boards();
@@ -21,8 +21,11 @@ async function loadBoards() {
     select.appendChild(option);
   }
   const storedBoard = localStorage.getItem('kanbanBoard');
+  const activeQueryBoard = queryBoard || new URLSearchParams(location.search).get('board');
   const fallbackBoard = data.current || data.boards[0]?.slug || 'default';
-  if (!storedBoard || (storedBoard === 'default' && data.current && data.current !== 'default')) {
+  if (activeQueryBoard && data.boards.find(b => b.slug === activeQueryBoard)) {
+    setBoard(activeQueryBoard);
+  } else if (!storedBoard || (storedBoard === 'default' && data.current && data.current !== 'default')) {
     setBoard(fallbackBoard);
   } else if (!data.boards.find(b => b.slug === state.board)) {
     setBoard(fallbackBoard);
@@ -101,11 +104,45 @@ export async function load() {
   await loadStatus();
 }
 
+function setupMoreActionsMenu() {
+  const moreActionsBtn = document.getElementById('moreActionsBtn');
+  const moreActionsPanel = document.getElementById('moreActionsPanel');
+  if (!moreActionsBtn || !moreActionsPanel) return;
+  const setOpen = open => {
+    moreActionsPanel.hidden = !open;
+    moreActionsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  moreActionsBtn.addEventListener('click', ev => {
+    ev.stopPropagation();
+    setOpen(moreActionsPanel.hidden);
+  });
+  moreActionsPanel.querySelectorAll('[data-secondary-action]').forEach(action => {
+    action.addEventListener('click', () => setOpen(false));
+  });
+  document.addEventListener('click', ev => {
+    if (!moreActionsPanel.hidden && !moreActionsPanel.contains(ev.target) && ev.target !== moreActionsBtn) setOpen(false);
+  });
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && !moreActionsPanel.hidden) {
+      setOpen(false);
+      moreActionsBtn.focus();
+    }
+  });
+}
+
+function updateBoardQueryParam(slug) {
+  const url = new URL(location.href);
+  url.searchParams.set('board', slug || 'default');
+  history.replaceState(null, '', url);
+}
+
 function setupControls() {
+  setupMoreActionsMenu();
   document.getElementById('refreshBtn').addEventListener('click', load);
   document.getElementById('langToggle').addEventListener('click', () => { setLang(nextLang()); updateThemeToggleLabel(); load(); });
   document.getElementById('boardSelect').addEventListener('change', async ev => {
     setBoard(ev.target.value);
+    updateBoardQueryParam(state.board);
     await api.switchBoard(state.board);
     await load();
   });

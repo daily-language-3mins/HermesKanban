@@ -22,7 +22,6 @@
       </div>
       <div class="top-actions">
         <select id="boardSelect" aria-label="board"></select>
-        <button class="button ghost" id="newBoardBtn" data-i18n="newBoard">新增看板</button>
         <button class="button ghost" id="refreshBtn" data-i18n="refresh">重新整理</button>
         <button class="button ghost theme-toggle" id="themeToggle" type="button" aria-pressed="false">🌙 深色</button>
         <button class="button" id="langToggle" type="button" aria-label="切換語言" data-i18n-aria-label="languageToggle">EN</button>
@@ -58,14 +57,21 @@
           <label class="check"><input id="archivedToggle" type="checkbox" /> <span data-i18n="showArchived">顯示封存</span></label>
         </div>
         <div class="toolbar-actions">
-          <button class="button ghost" id="opsToggleBtn" type="button" data-i18n="operations" aria-expanded="false">Operations</button>
           <button class="button primary" id="taskCreateBtn" type="button" data-i18n="taskCreate">新增任務</button>
-          <button class="button ghost" id="workflowBtn" type="button" data-i18n="workflowCreate">建立 Workflow</button>
-          <button class="button ghost" id="bulkBtn" type="button" data-i18n="bulkCreate">批次新增</button>
+          <div class="more-actions">
+            <button class="button ghost" id="moreActionsBtn" type="button" data-i18n="moreActions" aria-expanded="false" aria-controls="moreActionsPanel">更多</button>
+            <div class="more-actions-panel" id="moreActionsPanel" role="menu" aria-label="advanced actions" hidden>
+              <p class="eyebrow" data-i18n="advancedActions">進階功能</p>
+              <button class="button ghost" id="newBoardBtn" type="button" data-secondary-action data-i18n="newBoard">新增看板</button>
+              <button class="button ghost" id="opsToggleBtn" type="button" data-secondary-action data-i18n="operations" aria-expanded="false">Operations</button>
+              <button class="button ghost" id="workflowBtn" type="button" data-secondary-action data-i18n="workflowCreate">建立 Workflow</button>
+              <button class="button ghost" id="bulkBtn" type="button" data-secondary-action data-i18n="bulkCreate">批次新增</button>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section id="kpiRow" class="kpi-row" aria-label="board stats"></section>
+      <section id="kpiRow" class="compact-summary" aria-label="board stats"></section>
       <section id="opsPanel" class="ops-panel" aria-label="operations" hidden></section>
       <nav id="columnNav" class="column-nav" aria-label="kanban columns"></nav>
       <section id="board" class="board" aria-label="kanban board"></section>
