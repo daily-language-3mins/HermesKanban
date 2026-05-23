@@ -214,6 +214,7 @@ def instantiate_workflow(
                 max_runtime_seconds=step.get("max_runtime_seconds"),
                 skills=step.get("skills") or None,
             )
+            apply_workflow_initial_status(conn, task_id, step.get("status"), parents)
             created_count += 1
         step_task_ids[step_key] = task_id
         attach_workflow_fields(conn, task_id, template["id"], step_key)
@@ -291,6 +292,7 @@ def instantiate_steps_workflow(
                 max_runtime_seconds=step.get("max_runtime_seconds"),
                 skills=step.get("skills") or None,
             )
+            apply_workflow_initial_status(conn, task_id, step.get("status"), parents)
             created_count += 1
         step_task_ids[step_key] = task_id
         attach_workflow_fields(conn, task_id, source_id, step_key)
@@ -403,6 +405,33 @@ def attach_workflow_fields(conn, task_id: str, template_id: str, step_key: str) 
                 int(time.time()),
             ),
         )
+
+
+def apply_workflow_initial_status(conn, task_id: str, requested_status: Optional[str], parents: Iterable[str]) -> None:
+    """Apply workflow-only initial status after kanban_db.create_task.
+
+    kanban_db.create_task only has a triage flag and otherwise derives ready/todo
+    from whether parent tasks exist. Workflow drafts can explicitly request a
+    parentless root step to stay todo, so apply the preview-normalized status here
+    without importing the API router helper.
+    """
+    target = _preview_status({"status": requested_status or "ready"}, parents)
+    task = kanban_db.get_task(conn, task_id)
+    if task is None or task.status == target:
+        return
+    with kanban_db.write_txn(conn):
+        conn.execute("UPDATE tasks SET status = ? WHERE id = ?", (target, task_id))
+        conn.execute(
+            "INSERT INTO task_events (task_id, kind, payload, created_at) VALUES (?, ?, ?, ?)",
+            (
+                task_id,
+                "status",
+                json.dumps({"status": target, "reason": "workflow_initial_status"}, ensure_ascii=False),
+                int(time.time()),
+            ),
+        )
+    if target in {"ready", "done"}:
+        kanban_db.recompute_ready(conn)
 
 
 def _template_public(template: dict[str, Any]) -> dict[str, Any]:
