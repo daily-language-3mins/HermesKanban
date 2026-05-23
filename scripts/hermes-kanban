@@ -27,6 +27,7 @@ Commands:
   service stop          Stop the systemd user service
   service restart       Restart the systemd user service
   service status        Show systemd user service status
+  service check         Verify systemd status, health endpoint, listener, and logs
 
 Configuration:
   HERMES_KANBAN_WEBUI_ENV        Env file path; default ~/.hermes/kanban-webui.env
@@ -248,6 +249,52 @@ logs_cmd() {
   fi
 }
 
+service_check() {
+  source_env
+  normalize_runtime_env
+  command -v systemctl >/dev/null 2>&1 || die "systemctl not found; use hermes-kanban status instead."
+
+  local url host_header
+  url="http://$HOST:$PORT/health"
+  host_header="$HOST:$PORT"
+
+  info "unit=$(service_unit_path)"
+  systemctl --user is-enabled "$SERVICE_NAME"
+  systemctl --user is-active "$SERVICE_NAME"
+  systemctl --user --no-pager --property=MainPID,ExecMainStatus,Restart,FragmentPath show "$SERVICE_NAME"
+
+  if command -v curl >/dev/null 2>&1; then
+    info "health=$url host=$host_header"
+    local attempt
+    for attempt in {1..10}; do
+      if curl -fsS -H "Host: $host_header" --max-time 5 "$url"; then
+        echo
+        break
+      fi
+      if [[ "$attempt" == "10" ]]; then
+        echo
+        return 1
+      fi
+      sleep 0.5
+    done
+  else
+    info "curl not found; skipping HTTP health check"
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    info "listener=:$PORT"
+    ss -ltnp "( sport = :$PORT )" || true
+  else
+    info "ss not found; skipping listener check"
+  fi
+
+  if command -v journalctl >/dev/null 2>&1; then
+    info "recent-errors=last 5 minutes"
+    journalctl --user -u "$SERVICE_NAME" --since "5 minutes ago" --no-pager \
+      | grep -Ei "error|failed|exception|traceback" || true
+  fi
+}
+
 open_cmd() {
   local url
   url="$(url_cmd)"
@@ -395,12 +442,13 @@ service_cmd() {
   case "$sub" in
     install) service_install ;;
     uninstall|remove) service_uninstall ;;
+    check) service_check ;;
     start|stop|restart|status)
       command -v systemctl >/dev/null 2>&1 || die "systemctl not found; use hermes-kanban $sub instead."
       systemctl --user "$sub" "$SERVICE_NAME"
       ;;
     *)
-      die "Usage: hermes-kanban service {install|uninstall|start|stop|restart|status}"
+      die "Usage: hermes-kanban service {install|uninstall|start|stop|restart|status|check}"
       ;;
   esac
 }

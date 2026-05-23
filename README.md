@@ -210,11 +210,15 @@ The preferred install path is generated from your env file:
 hermes-kanban service install
 hermes-kanban service start
 hermes-kanban service status
+hermes-kanban service check
 ```
 
 This creates `~/.config/systemd/user/hermes-kanban.service` with
 `HERMES_KANBAN_WEBUI_ENV=~/.hermes/kanban-webui.env` and runs
-`hermes-kanban serve` in the foreground, which is systemd-friendly.
+`hermes-kanban serve` in the foreground, which is systemd-friendly. The
+`service check` command prints enabled/active state, systemd execution metadata,
+`GET /health` with the configured Host header, the listening socket, and recent
+journal errors.
 
 If your Linux/WSL environment does not run systemd, use `hermes-kanban start`
 instead. A static template is also available at
@@ -253,16 +257,21 @@ Tokens are not accepted in query strings.
 - If exposing beyond localhost, set `HERMES_KANBAN_WEBUI_TOKEN` and prefer a
   trusted reverse proxy or Tailscale-only proxy over binding to `0.0.0.0`.
 
-Example for a Tailscale MagicDNS hostname:
+Example for a Tailscale MagicDNS hostname or Tailscale-IP bind:
 
 ```bash
-export HERMES_KANBAN_WEBUI_ALLOWED_HOSTS="my-host.my-tailnet.ts.net"
+# Tailscale-only bind; replace the IP/hostname with your node values.
+export HERMES_KANBAN_WEBUI_HOST="100.x.y.z"
+export HERMES_KANBAN_WEBUI_ALLOWED_HOSTS="100.x.y.z,my-host.my-tailnet.ts.net"
 read -r HERMES_KANBAN_WEBUI_TOKEN < <(openssl rand -hex 32)
 export HERMES_KANBAN_WEBUI_TOKEN
-uv run python server.py --host 127.0.0.1 --port 8790
+uv run python server.py --host "$HERMES_KANBAN_WEBUI_HOST" --port 8790
 ```
 
-Then expose `127.0.0.1:8790` through your chosen Tailscale/reverse-proxy setup.
+For systemd installs, put those values in `~/.hermes/kanban-webui.env`, then run
+`hermes-kanban service restart && hermes-kanban service check`. The check uses a
+Host header of `$HERMES_KANBAN_WEBUI_HOST:$HERMES_KANBAN_WEBUI_PORT`, matching
+Tailscale-IP access such as `http://100.x.y.z:8790/`.
 
 ## AI Workflow Designer
 

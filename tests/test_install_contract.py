@@ -60,6 +60,9 @@ def test_hermes_kanban_wrapper_exposes_lifecycle_doctor_service_commands():
         "open)",
         "serve)",
         "service)",
+        "service_check",
+        "service install",
+        "service check",
         "service_install",
         "systemctl --user",
         "HERMES_KANBAN_WEBUI_ENV",
@@ -106,6 +109,7 @@ def test_readme_documents_one_command_install_and_management_flow():
         "hermes-kanban doctor",
         "hermes-kanban logs",
         "hermes-kanban service install",
+        "hermes-kanban service check",
         "~/.hermes/kanban-webui.env",
         "~/.local/bin/hermes-kanban",
     ]:
