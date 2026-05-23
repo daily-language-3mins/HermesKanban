@@ -8,7 +8,7 @@ import { setupMobileFallback } from './mobile.js?v=20260522-zh-tw';
 import { setupAppUpdatePrompt } from './update.js?v=20260522-zh-tw';
 import { setupOperationsPanel, refreshOperationsPanel } from './operations.js?v=20260522-zh-tw';
 import { closeDrawer } from './drawer.js?v=20260522-zh-tw';
-import { state, setBoard, toast, queryBoard } from './state.js?v=20260522-zh-tw';
+import { state, setBoard, toast, queryBoard, querySearch } from './state.js?v=20260522-zh-tw';
 
 async function loadBoards() {
   const data = await api.boards();
@@ -138,6 +138,8 @@ function updateBoardQueryParam(slug) {
 
 function setupControls() {
   setupMoreActionsMenu();
+  const searchInput = document.getElementById('searchInput');
+  if (querySearch && searchInput) searchInput.value = querySearch;
   document.getElementById('refreshBtn').addEventListener('click', load);
   document.getElementById('langToggle').addEventListener('click', () => { setLang(nextLang()); updateThemeToggleLabel(); load(); });
   document.getElementById('boardSelect').addEventListener('change', async ev => {
