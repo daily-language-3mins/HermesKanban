@@ -57,16 +57,7 @@ jobs:
           node-version: '20'
 
       - name: Check JavaScript syntax
-        run: |
-          node --check static/api.js
-          node --check static/app.js
-          node --check static/board.js
-          node --check static/drawer.js
-          node --check static/dragdrop.js
-          node --check static/forms.js
-          node --check static/markdown.js
-          node --check static/mobile.js
-          node --check static/monitor.js
+        run: python3 scripts/check_static_js.py
 
       - name: Lint DESIGN.md
         run: npx -y @google/design.md lint DESIGN.md
