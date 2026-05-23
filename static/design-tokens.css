@@ -9,6 +9,8 @@
   --wash-b: #a8c8e8;
   --ink: #171717;
   --muted: #5f6368;
+  --muted-strong: #3f454d;
+  --focus-ring: rgba(13, 116, 206, 0.44);
   --faint: #8a9099;
   --border: #dcdee0;
   --hairline: #f0f0f3;
@@ -65,6 +67,8 @@
   --wash-b: rgba(37, 99, 235, 0.24);
   --ink: #e5edf7;
   --muted: #a7b4c8;
+  --muted-strong: #cbd5e1;
+  --focus-ring: rgba(103, 232, 249, 0.54);
   --faint: #74839a;
   --border: #475569;
   --hairline: rgba(148, 163, 184, 0.30);

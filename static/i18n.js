@@ -4,8 +4,9 @@ export const DEFAULT_LANGUAGE = 'zh-Hant';
 
 export const labels = {
   'zh-Hant': {
-    subtitle: '清楚好讀的任務營運看板', newBoard: '新增看板', refresh: '重新整理', themeDark: '切換深色', themeLight: '切換淺色', quickTitle: '輸入任務標題後按 Enter',
+    subtitle: '清楚好讀的任務營運看板', newBoard: '新增看板', refresh: '重新整理', themeDark: '切換深色', themeLight: '切換淺色', languageToggle: '切換語言', quickTitle: '輸入任務標題後按 Enter',
     taskCreate: '新增任務', taskCreateHint: '需要設定標題、說明、代理 profile 與狀態時，在這裡建立新 task。', taskTitlePlaceholder: '任務標題', taskBodyPlaceholder: '任務說明／指示（選填）',
+    openTaskHint: '開啟任務詳情', dragTaskHint: '拖曳移動', taskStatusLabel: '任務狀態', emptyColumnHint: '可用右上角＋在此狀態新增任務', addTaskToColumn: '新增任務到欄位',
     assignee: '負責 profile', create: '新增', created: '建立時間', createdToast: '已建立', search: '搜尋標題／內容／ID', allAssignees: '全部負責人', unassigned: '未指定', profileMissing: '尚未指定負責 profile', profileMissingShort: '需要 profile', agentProfile: 'profile', manualAssignee: '手動', showArchived: '顯示封存',
     bulkCreate: '批次新增', boardName: '看板名稱', description: '說明', cancel: '取消', bulkHint: '每行輸入一個任務。', loading: '載入中…',
     workflow: 'Workflow', workflowCreate: '建立 AI Workflow', workflowDesignerHint: '用提示詞與附件設計任務 DAG，核准後套用成真正的 Kanban task。', workflowPrompt: 'Workflow 提示詞', workflowPromptPlaceholder: '描述目標、交付物、限制與期望步驟數', workflowPlannerProfile: 'Planner profile', workflowAttachments: '附件', workflowPlan: '規劃', workflowPlanning: 'AI 正在設計 workflow 草稿…', workflowRevise: '修改', workflowRevisionPlaceholder: '描述要調整的步驟／profile／依賴關係', workflowApply: '套用', workflowDraftStatus: '草稿狀態', workflowDraftEmpty: '輸入提示詞並按「規劃」後會顯示草稿。', workflowNotApplyable: '這份草稿目前還不能套用。請先解決問題後送出修改。', workflowInstance: 'Instance ID', workflowStep: '目前步驟', workflowSteps: '步驟',
@@ -22,8 +23,9 @@ export const labels = {
     operations: 'Operations', opsOverview: 'Operations 總覽', opsRunning: '執行中', opsHeartbeatOverdue: 'Heartbeat 逾時', opsRetryQueue: 'Retry queue', opsBlockedAfterRetries: '重試後卡住', opsRecentFailures: '近期失敗', opsNoRunning: '沒有執行中的任務', opsNoRetry: '沒有可重試項目', opsNoBlockedAfterRetries: '沒有重試後卡住的任務', opsNoFailures: '近期沒有失敗事件', opsEligibleNow: '現在可執行', opsEstimatedWait: '預估等待', opsAttempt: '嘗試次數', opsLastError: '最後錯誤', opsOpenTask: '開啟任務', opsEstimatedBackoffAdvisory: '顯示的 backoff 是依目前失敗資訊估算的參考值，dispatcher 尚未強制套用。', empty: '無'
   },
   ko: {
-    subtitle: '읽기 쉬운 작업 운영 보드', newBoard: '보드 추가', refresh: '새로고침', themeDark: '다크로 전환', themeLight: '라이트로 전환', quickTitle: '작업 제목을 입력하고 Enter',
+    subtitle: '읽기 쉬운 작업 운영 보드', newBoard: '보드 추가', refresh: '새로고침', themeDark: '다크로 전환', themeLight: '라이트로 전환', languageToggle: '언어 전환', quickTitle: '작업 제목을 입력하고 Enter',
     taskCreate: 'Task 추가', taskCreateHint: '필요할 때만 제목, 설명, 담당 프로필, 상태를 입력해 새 task를 생성합니다.', taskTitlePlaceholder: '작업 제목', taskBodyPlaceholder: '작업 설명/지시사항(선택)',
+    openTaskHint: '작업 상세 열기', dragTaskHint: '드래그 이동', taskStatusLabel: '작업 상태', emptyColumnHint: '오른쪽 위 +로 이 상태에 작업을 추가하세요', addTaskToColumn: '컬럼에 작업 추가',
     assignee: '담당 프로필', create: '추가', created: '생성일', createdToast: '생성됨', search: '작업 제목/내용/ID 검색', allAssignees: '전체 담당자', unassigned: '미지정', profileMissing: '담당 프로필 미지정', profileMissingShort: '프로필 필요', agentProfile: '프로필', manualAssignee: '수동', showArchived: '보관함 표시',
     bulkCreate: '일괄 추가', boardName: '보드 이름', description: '설명', cancel: '취소', bulkHint: '한 줄에 작업 하나씩 입력하세요.', loading: '불러오는 중…',
     workflow: 'Workflow', workflowCreate: 'AI Workflow 생성', workflowDesignerHint: '프롬프트와 첨부파일로 작업 DAG를 설계한 뒤 승인 시 실제 Kanban task로 적용합니다.', workflowPrompt: 'Workflow 프롬프트', workflowPromptPlaceholder: '목표, 산출물, 제약, 원하는 단계 수를 설명하세요', workflowPlannerProfile: 'Planner 프로필', workflowAttachments: '첨부파일', workflowPlan: '설계', workflowPlanning: 'AI가 workflow 초안을 설계하는 중…', workflowRevise: '수정', workflowRevisionPlaceholder: '변경할 단계/담당 프로필/의존성을 설명하세요', workflowApply: '적용', workflowDraftStatus: 'Draft 상태', workflowDraftEmpty: '프롬프트를 입력하고 설계를 누르면 초안이 표시됩니다.', workflowNotApplyable: '아직 적용할 수 없는 초안입니다. 질문을 해결한 뒤 수정 요청을 보내세요.', workflowInstance: 'Instance ID', workflowStep: '현재 단계', workflowSteps: '단계',
@@ -40,8 +42,9 @@ export const labels = {
     operations: 'Operations', opsOverview: 'Operations 개요', opsRunning: '실행 중', opsHeartbeatOverdue: 'Heartbeat 지연', opsRetryQueue: 'Retry queue', opsBlockedAfterRetries: '재시도 후 막힘', opsRecentFailures: '최근 실패', opsNoRunning: '실행 중인 작업 없음', opsNoRetry: '재시도 후보 없음', opsNoBlockedAfterRetries: '재시도 후 막힌 작업 없음', opsNoFailures: '최근 실패 이벤트 없음', opsEligibleNow: '지금 가능', opsEstimatedWait: '예상 대기', opsAttempt: '시도', opsLastError: '마지막 오류', opsOpenTask: '열기', opsEstimatedBackoffAdvisory: '표시된 backoff는 현재 실패 정보로 계산한 참고용 추정치이며 dispatcher가 아직 강제하지 않습니다.', empty: '없음'
   },
   en: {
-    subtitle: 'Readable operations board', newBoard: 'New board', refresh: 'Refresh', themeDark: 'Switch dark', themeLight: 'Switch light', quickTitle: 'Type a task title and press Enter',
+    subtitle: 'Readable operations board', newBoard: 'New board', refresh: 'Refresh', themeDark: 'Switch dark', themeLight: 'Switch light', languageToggle: 'Switch language', quickTitle: 'Type a task title and press Enter',
     taskCreate: 'Create task', taskCreateHint: 'Open this dialog only when you need to set title, details, agent profile, and status for a new task.', taskTitlePlaceholder: 'Task title', taskBodyPlaceholder: 'Task details/instructions (optional)',
+    openTaskHint: 'Open task details', dragTaskHint: 'Drag to move', taskStatusLabel: 'Task status', emptyColumnHint: 'Use the top-right + to add a task in this status', addTaskToColumn: 'Add task to column',
     assignee: 'Agent profile', create: 'Create', created: 'Created', createdToast: 'Created', search: 'Search title/body/ID', allAssignees: 'All assignees', unassigned: 'Unassigned', profileMissing: 'Agent profile missing', profileMissingShort: 'Needs profile', agentProfile: 'profile', manualAssignee: 'manual', showArchived: 'Show archived',
     bulkCreate: 'Bulk create', boardName: 'Board name', description: 'Description', cancel: 'Cancel', bulkHint: 'One task per line.', loading: 'Loading…',
     workflow: 'Workflow', workflowCreate: 'Create AI workflow', workflowDesignerHint: 'Design a task DAG from a prompt and attachments, then approve it into real Kanban tasks.', workflowPrompt: 'Workflow prompt', workflowPromptPlaceholder: 'Describe goals, outputs, constraints, and desired step count', workflowPlannerProfile: 'Planner profile', workflowAttachments: 'Attachments', workflowPlan: 'Plan', workflowPlanning: 'AI is designing a workflow draft…', workflowRevise: 'Revise', workflowRevisionPlaceholder: 'Describe step/profile/dependency changes', workflowApply: 'Apply', workflowDraftStatus: 'Draft status', workflowDraftEmpty: 'Enter a prompt and click Plan to preview a draft.', workflowNotApplyable: 'This draft is not applyable yet. Resolve questions and send a revision.', workflowInstance: 'Instance ID', workflowStep: 'Current step', workflowSteps: 'steps',
@@ -77,6 +80,7 @@ export function applyI18n(root = document) {
   root.documentElement?.setAttribute('lang', currentLang);
   root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  root.querySelectorAll('[data-i18n-aria-label]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
   const toggle = root.getElementById?.('langToggle');
   if (toggle) toggle.textContent = LANGUAGE_TOGGLE_LABELS[nextLang()];
 }
