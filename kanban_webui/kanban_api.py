@@ -1147,6 +1147,12 @@ def bulk_create(payload: BulkCreateBody, board: Optional[str] = Query(None)) -> 
             )
             if item.status:
                 _set_status_direct(conn, task_id, item.status)
+            _apply_create_workflow_fields(
+                conn,
+                task_id,
+                workflow_template_id=item.workflow_template_id,
+                current_step_key=item.current_step_key,
+            )
             results.append({"ok": True, "task_id": task_id, "title": item.title})
         except Exception as exc:
             results.append({"ok": False, "title": item.title, "error": str(exc)})
