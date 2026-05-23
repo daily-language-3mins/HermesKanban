@@ -50,13 +50,13 @@ def _patch_profiles(monkeypatch):
     monkeypatch.setattr(kanban_db, "list_profiles_on_disk", lambda: ["default", "dev", "dev_plan"])
 
 
-def _patch_planner(monkeypatch, seen: dict[str, Any] | None = None):
+def _patch_planner(monkeypatch, seen: dict[str, Any] | None = None, proposal_factory=None):
     from kanban_webui import workflow_planner
 
     def fake_generate_workflow_proposal(**kwargs):
         if seen is not None:
             seen.update(kwargs)
-        return _fake_proposal()
+        return proposal_factory() if proposal_factory else _fake_proposal()
 
     monkeypatch.setattr(workflow_planner, "generate_workflow_proposal", fake_generate_workflow_proposal)
 
@@ -178,6 +178,56 @@ def test_workflow_draft_apply_creates_tasks_links_and_locks_applied_draft(client
     )
     assert second_apply.status_code == 409
 
+
+def test_workflow_draft_apply_preserves_explicit_root_todo_and_triage_statuses(client, monkeypatch):
+    _patch_profiles(monkeypatch)
+
+    def proposal_with_root_todo_and_triage():
+        proposal = _fake_proposal()
+        proposal["steps"][0]["status"] = "todo"
+        proposal["steps"].append(
+            {
+                "key": "triage",
+                "title": "분류: 결제 요청 검토",
+                "body": "요청을 먼저 triage 하세요.",
+                "assignee": "dev_plan",
+                "skills": [],
+                "priority": 3,
+                "status": "triage",
+                "depends_on": [],
+                "acceptance_criteria": ["분류가 완료됨"],
+            }
+        )
+        return proposal
+
+    _patch_planner(monkeypatch, proposal_factory=proposal_with_root_todo_and_triage)
+
+    create = client.post(
+        "/api/workflows/drafts?board=default",
+        json={"prompt": "root todo workflow를 만들어줘."},
+    )
+    assert create.status_code == 200, create.text
+    draft = create.json()["draft"]
+    assert draft["proposal"]["steps"][0]["status"] == "todo"
+    assert draft["proposal"]["steps"][1]["status"] == "todo"
+    assert draft["proposal"]["steps"][2]["status"] == "triage"
+
+    applied = client.post(
+        f"/api/workflows/drafts/{draft['draft_id']}/instantiate?board=default",
+        json={"instance_id": "wf_root_todo"},
+    )
+    assert applied.status_code == 200, applied.text
+    result = applied.json()
+    result_by_step = {task["step_key"]: task for task in result["tasks"]}
+    assert result_by_step["plan"]["status"] == "todo"
+    assert result_by_step["implement"]["status"] == "todo"
+    assert result_by_step["triage"]["status"] == "triage"
+
+    board = client.get("/api/board?board=default").json()
+    by_step = {task["current_step_key"]: task for task in board["tasks"]}
+    assert by_step["plan"]["status"] == "todo"
+    assert by_step["implement"]["status"] == "todo"
+    assert by_step["triage"]["status"] == "triage"
 
 
 def test_workflow_draft_rejects_wrong_board_access_and_apply(client, monkeypatch):
