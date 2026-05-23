@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import importlib.util
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -67,8 +69,23 @@ def test_static_javascript_parses():
     if not node:
         pytest.skip('node is required for static JavaScript syntax checks')
     root = Path(__file__).resolve().parents[1]
-    for path in sorted((root / 'static').glob('*.js')):
-        subprocess.run([node, '--check', str(path)], check=True, cwd=root)
+    checker = root / 'scripts' / 'check_static_js.py'
+    assert checker.is_file()
+    subprocess.run([sys.executable, str(checker)], check=True, cwd=root)
+
+
+def test_static_javascript_check_fails_without_modules(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    checker = root / 'scripts' / 'check_static_js.py'
+    spec = importlib.util.spec_from_file_location('check_static_js', checker)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    empty_repo = tmp_path / 'repo'
+    (empty_repo / 'static').mkdir(parents=True)
+    with pytest.raises(RuntimeError, match='no static JavaScript modules found'):
+        module.check_static_javascript(empty_repo)
 
 
 def test_default_language_is_traditional_chinese():
