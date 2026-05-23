@@ -138,6 +138,41 @@ function workflowDetailSection(task) {
   </section>`;
 }
 
+
+const GITHUB_PR_PATTERN = 'github.com/';
+
+function flattenReviewItems(value, prefix = '') {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap((item, idx) => flattenReviewItems(item, `${prefix}${idx + 1}. `));
+  if (typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, item]) => flattenReviewItems(item, `${prefix}${key}: `));
+  }
+  return [`${prefix}${String(value)}`];
+}
+
+function reviewMetadataSection(task, detail) {
+  const metadata = task.metadata && typeof task.metadata === 'object' ? task.metadata : {};
+  const text = [task.body || '', ...(detail.comments || []).map(comment => comment.body || '')].join('\n');
+  const prUrls = new Set([...text.matchAll(/https:\/\/github\.com\/[^\s)]+\/pull\/\d+/g)].map(match => match[0]));
+  if (metadata.pr_url) prUrls.add(String(metadata.pr_url));
+  if (metadata.pr_number && !prUrls.size) prUrls.add(`PR #${metadata.pr_number}`);
+  const reviewItems = [];
+  for (const key of ['review_status', 'findings', 'tests_run', 'tests_passed', 'pr_url', 'pr_number']) {
+    if (metadata[key]) reviewItems.push(...flattenReviewItems(metadata[key], `${key}: `));
+  }
+  if (!prUrls.size && !reviewItems.length && !/review-required|changes requested|approved/i.test(text)) return '';
+  if (!reviewItems.length && /review-required|changes requested|approved/i.test(text)) reviewItems.push(t('reviewSignal'));
+  const links = [...prUrls].map(url => url.startsWith('http')
+    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>`
+    : `<span>${escapeHtml(url)}</span>`).join('');
+  const items = reviewItems.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+  return `<details class="drawer-section review-metadata-section" open>
+    <summary>${t('reviewMetadata')}</summary>
+    ${links ? `<div class="review-links">${links}</div>` : ''}
+    ${items ? `<ul class="review-metadata-list">${items}</ul>` : ''}
+  </details>`;
+}
+
 async function renderWorkerLog(taskId, root) {
   const pre = root.querySelector('#workerLogContent');
   if (!pre) return;
@@ -175,41 +210,43 @@ export async function openTaskDrawer(taskId) {
       <button class="icon-button" id="drawerClose" aria-label="close">×</button>
     </div>
 
-    <form id="taskMetaForm" class="drawer-section inline-form">
-      <label>${t('title')}<input id="editTitle" name="title" value="${escapeHtml(task.title)}" /></label>
-      <label>${t('assignee')}<select name="assignee">${assigneeOptions(boardData.assignees || [], task.assignee)}</select></label>
-      <label>${t('priority')}<input name="priority" type="number" value="${Number(task.priority || 0)}" /></label>
-      <button class="button primary" data-assignee-save data-priority-save>${t('save')}</button>
-    </form>
-
-    <div class="drawer-meta detail-grid">
-      <span><strong>${t('status')}</strong>${escapeHtml(task.status)}</span>
-      <span><strong>${t('workspace')}</strong>${escapeHtml(task.workspace_kind || 'scratch')}</span>
-      <span><strong>${t('createdBy')}</strong>${escapeHtml(task.created_by || '—')}</span>
-      <span><strong>${t('created')}</strong>${formatTime(task.created_at)}</span>
-      ${task.tenant ? `<span><strong>Tenant</strong>${escapeHtml(task.tenant)}</span>` : ''}
-    </div>
-
-    ${workflowDetailSection(task)}
-
-    <div class="drawer-actions">
-      <button data-action="triage" data-status="triage" class="button ghost">→ triage</button>
-      <button data-action="ready" data-status="ready" class="button ghost">→ ready</button>
-      <button data-action="block" data-status="blocked" class="button ghost">${t('block')}</button>
-      <button data-action="unblock" data-status="ready" class="button ghost">${t('unblock')}</button>
-      <button data-action="complete" data-status="done" class="button ghost">${t('complete')}</button>
-      <button data-action="archive" data-status="archived" class="button ghost danger-btn">${t('archive')}</button>
-    </div>
-
-    <section id="monitorMount"></section>
-
-    <section class="drawer-section">
+    <section class="drawer-section overview-section">
+      <div class="section-title"><h3>${t('overview')}</h3></div>
+      <form id="taskMetaForm" class="inline-form">
+        <label>${t('title')}<input id="editTitle" name="title" value="${escapeHtml(task.title)}" /></label>
+        <label>${t('assignee')}<select name="assignee">${assigneeOptions(boardData.assignees || [], task.assignee)}</select></label>
+        <label>${t('priority')}<input name="priority" type="number" value="${Number(task.priority || 0)}" /></label>
+        <button class="button primary" data-assignee-save data-priority-save>${t('save')}</button>
+      </form>
+      <div class="drawer-meta detail-grid">
+        <span><strong>${t('status')}</strong>${escapeHtml(task.status)}</span>
+        <span><strong>${t('workspace')}</strong>${escapeHtml(task.workspace_kind || 'scratch')}</span>
+        <span><strong>${t('createdBy')}</strong>${escapeHtml(task.created_by || '—')}</span>
+        <span><strong>${t('created')}</strong>${formatTime(task.created_at)}</span>
+        ${task.tenant ? `<span><strong>Tenant</strong>${escapeHtml(task.tenant)}</span>` : ''}
+      </div>
       <div class="section-title"><h3>${t('body')}</h3></div>
       <div class="markdown">${task.body ? renderMarkdown(task.body) : `<p class="muted">— ${t('noDescription')} —</p>`}</div>
       <form id="bodyEditForm" class="comment-form"><textarea name="body" rows="7">${escapeHtml(task.body || '')}</textarea><button class="button">${t('save')}</button></form>
     </section>
 
-    <section class="drawer-section">
+    ${workflowDetailSection(task)}
+    ${reviewMetadataSection(task, detail)}
+
+    <section class="drawer-section blocker-lifecycle-section">
+      <div class="section-title"><h3>${t('blockerLifecycle')}</h3><small>${t('claimHeartbeat')}</small></div>
+      ${task.block_reason ? `<div class="ops-chip warning">${escapeHtml(task.block_reason)}</div>` : `<p class="muted">${t('none')}</p>`}
+      <div class="drawer-actions lifecycle-actions">
+        <button data-action="triage" data-status="triage" class="button ghost">→ triage</button>
+        <button data-action="ready" data-status="ready" class="button ghost">→ ready</button>
+        <button data-action="block" data-status="blocked" class="button ghost">${t('block')}</button>
+        <button data-action="unblock" data-status="ready" class="button ghost">${t('unblock')}</button>
+        <button data-action="complete" data-status="done" class="button ghost">${t('complete')}</button>
+        <button data-action="archive" data-status="archived" class="button ghost danger-btn">${t('archive')}</button>
+      </div>
+    </section>
+
+    <section class="drawer-section dependencies-section">
       <div class="section-title"><h3>${t('dependencies')}</h3></div>
       <div class="section-title dependency-map-title"><h4>${t('dependencyMap')}</h4></div>
       ${dependencyMiniMap(detail, boardData, task)}
@@ -223,23 +260,27 @@ export async function openTaskDrawer(taskId) {
       </div>
     </section>
 
-    <section class="drawer-section">
-      <div class="section-title"><h3>${t('notifyHomeChannels')}</h3></div>
-      ${homeChannelButtons(homes.home_channels)}
-    </section>
+    <details class="drawer-section worker-runs-section" open>
+      <summary>${t('workerRunsMonitor')}</summary>
+      <section id="monitorMount"></section>
+      <ol class="timeline">${detail.runs.length ? detail.runs.map(r => `<li><code>${r.id}</code> ${runSummary(r)}</li>`).join('') : `<li>${t('empty')}</li>`}</ol>
+    </details>
 
-    <section class="drawer-section"><h3>${t('comments')} (${detail.comments.length})</h3>
-      <ol class="comment-list">${detail.comments.length ? detail.comments.map(c => `<li><strong>${escapeHtml(c.author)}</strong><small>${formatTime(c.created_at)}</small><p>${escapeHtml(c.body)}</p></li>`).join('') : `<li>${t('empty')}</li>`}</ol>
-      <form id="commentForm" class="comment-form"><textarea name="body" placeholder="${t('addComment')}"></textarea><button class="button">${t('addComment')}</button></form>
-    </section>
+    <details class="drawer-section comments-events-section">
+      <summary>${t('commentsEvents')}</summary>
+      <section><h3>${t('notifyHomeChannels')}</h3>${homeChannelButtons(homes.home_channels)}</section>
+      <section><h3>${t('comments')} (${detail.comments.length})</h3>
+        <ol class="comment-list">${detail.comments.length ? detail.comments.map(c => `<li><strong>${escapeHtml(c.author)}</strong><small>${formatTime(c.created_at)}</small><p>${escapeHtml(c.body)}</p></li>`).join('') : `<li>${t('empty')}</li>`}</ol>
+        <form id="commentForm" class="comment-form"><textarea name="body" placeholder="${t('addComment')}"></textarea><button class="button">${t('addComment')}</button></form>
+      </section>
+      <section><h3>${t('events')}</h3><ol class="timeline">${detail.events.map(e => `<li><code>${e.id}</code> ${escapeHtml(e.kind)} ${eventPayload(e.payload)} <small>${formatTime(e.created_at)}</small></li>`).join('')}</ol></section>
+    </details>
 
-    <section class="drawer-section"><h3>${t('runs')}</h3><ol class="timeline">${detail.runs.length ? detail.runs.map(r => `<li><code>${r.id}</code> ${runSummary(r)}</li>`).join('') : `<li>${t('empty')}</li>`}</ol></section>
-    <section class="drawer-section"><h3>${t('events')}</h3><ol class="timeline">${detail.events.map(e => `<li><code>${e.id}</code> ${escapeHtml(e.kind)} ${eventPayload(e.payload)} <small>${formatTime(e.created_at)}</small></li>`).join('')}</ol></section>
-
-    <section class="drawer-section">
+    <details class="drawer-section worker-log-section">
+      <summary>${t('workerLog')}</summary>
       <div class="section-title worker-log-head"><h3>${t('workerLog')}</h3><button class="button ghost" data-log-refresh>${t('refresh')}</button></div>
       <pre id="workerLogContent" class="log-tail"></pre>
-    </section>
+    </details>
   `;
   applyI18n(drawer);
   drawer.querySelector('#drawerClose').addEventListener('click', closeDrawer);

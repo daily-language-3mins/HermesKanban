@@ -1,5 +1,7 @@
+export const queryBoard = new URLSearchParams(location.search).get('board') || '';
+
 export const state = {
-  board: localStorage.getItem('kanbanBoard') || 'default',
+  board: queryBoard || localStorage.getItem('kanbanBoard') || 'default',
   includeArchived: false,
   query: '',
   assignee: '',

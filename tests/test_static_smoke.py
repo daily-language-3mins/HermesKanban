@@ -480,3 +480,80 @@ def test_board_polish_improves_card_scanability_and_accessibility():
         '-webkit-line-clamp: 3;',
     ]:
         assert phrase in style
+
+
+def test_issue6_progressive_disclosure_contract():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    app = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    for phrase in ['id="moreActionsBtn"', 'id="moreActionsPanel"', 'aria-controls="moreActionsPanel"', 'data-secondary-action']:
+        assert phrase in index
+    toolbar = index.split('<div class="toolbar-actions">', 1)[1].split('<div class="more-actions-panel"', 1)[0]
+    assert 'id="taskCreateBtn"' in toolbar
+    for advanced_id in ['newBoardBtn', 'opsToggleBtn', 'workflowBtn', 'bulkBtn']:
+        assert f'id="{advanced_id}"' not in toolbar
+    for phrase in ['setupMoreActionsMenu', 'moreActionsBtn', "ev.key === 'Escape'", 'aria-expanded', 'moreActionsPanel.hidden']:
+        assert phrase in app
+    for key in ['moreActions', 'advancedActions', 'closeActions']:
+        assert key in i18n
+    for phrase in ['.more-actions', '.more-actions-panel', '[data-secondary-action]', '@media (max-width: 760px)']:
+        assert phrase in style
+
+
+def test_issue6_compact_summary_and_card_signal_contract():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    assert 'id="kpiRow" class="compact-summary"' in index
+    for phrase in ['class="summary-chip"', 'aria-label="${escapeHtml(`${t(status)}: ${count}`)}"', '--summary-chip-count']:
+        assert phrase in board
+    assert 'class="kpi"' not in board
+    for phrase in ['card-primary-meta', 'card-secondary-meta', 'card-hermes-signal', 'hermesSignals', 'reviewSignal', 'prSignal', 'blockReason']:
+        assert phrase in board
+    for key in ['blockedSignal', 'liveSignal', 'dependenciesSignal', 'commentsSignal', 'reviewSignal', 'prSignal']:
+        assert key in i18n
+    for phrase in ['.compact-summary', '.summary-chip', '.card-primary-meta', '.card-secondary-meta', '.card-hermes-signal', '-webkit-line-clamp: 2;', '.task-drag-hint { margin-left: auto;']:
+        assert phrase in style
+
+
+def test_issue6_drawer_progressive_hermes_sections_contract():
+    root = Path(__file__).resolve().parents[1]
+    drawer = (root / 'static' / 'drawer.js').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    for phrase in [
+        'drawer-section overview-section',
+        'drawer-section blocker-lifecycle-section',
+        'drawer-section dependencies-section',
+        'drawer-section worker-runs-section',
+        'drawer-section comments-events-section',
+        'drawer-section worker-log-section',
+        'reviewMetadataSection',
+        'github.com/',
+        '<details class="drawer-section',
+    ]:
+        assert phrase in drawer
+    for key in ['overview', 'blockerLifecycle', 'workerRunsMonitor', 'commentsEvents', 'reviewMetadata', 'claimHeartbeat']:
+        assert key in i18n
+    for phrase in ['.drawer-section[open]', '.drawer-section summary', '.review-metadata-list', '.lifecycle-actions']:
+        assert phrase in style
+
+
+def test_issue6_deeplink_and_mobile_overflow_contract():
+    root = Path(__file__).resolve().parents[1]
+    app = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+    state = (root / 'static' / 'state.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+
+    for phrase in ['new URLSearchParams(location.search).get(\'board\')', 'queryBoard', 'activeQueryBoard', 'history.replaceState', 'setBoard(activeQueryBoard)']:
+        assert phrase in app
+    assert 'queryBoard' in state
+    for phrase in ['html, body { min-height: 100%; overflow-x: clip; }', 'max-width: 100%;', 'minmax(calc(100vw - 32px), 1fr)', 'minmax(calc(100vw - 16px), 1fr)']:
+        assert phrase in style
