@@ -64,6 +64,15 @@ def test_app_update_static_contract():
         assert css_class in style
 
 
+def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
+    root = Path(__file__).resolve().parents[1]
+    gitignore = (root / '.gitignore').read_text(encoding='utf-8').splitlines()
+
+    assert '.kanban-worktrees/' in gitignore
+    assert 'docs/plans/' not in gitignore
+    assert 'docs/plans/issue-*.md' not in gitignore
+
+
 def test_static_javascript_parses():
     node = shutil.which('node')
     if not node:
