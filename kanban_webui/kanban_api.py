@@ -784,6 +784,28 @@ def get_workflow_draft(draft_id: str, board: Optional[str] = Query(None)) -> dic
     return {"ok": True, "board": selected, "draft": draft, "profiles": draft.get("profiles") or []}
 
 
+@router.delete("/workflows/drafts/{draft_id}")
+def delete_workflow_draft(
+    draft_id: str,
+    board: Optional[str] = Query(None),
+    archive: bool = Query(False),
+    force: bool = Query(False),
+) -> dict[str, Any]:
+    selected = _resolve_board(board)
+    settings = get_settings()
+    try:
+        draft = _load_workflow_draft_for_board(settings, draft_id, selected)
+        result = workflow_drafts.remove_draft(settings, draft, archive=archive, force=force)
+        return {"ok": True, "board": selected, **result}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"workflow draft {draft_id!r} not found") from exc
+    except HTTPException:
+        raise
+    except workflow_drafts.DraftError as exc:
+        status = 409 if "applied workflow drafts require force=true" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @router.post("/workflows/drafts/{draft_id}/revise")
 def revise_workflow_draft(
     draft_id: str,
