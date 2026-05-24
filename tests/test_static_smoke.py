@@ -74,6 +74,49 @@ def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
     assert 'docs/plans/issue-*.md' not in gitignore
 
 
+def test_done_column_compacts_dominating_history_by_default():
+    root = Path(__file__).resolve().parents[1]
+    board = (root / 'static' / 'board.js').read_text(encoding='utf-8')
+    style = (root / 'static' / 'style.css').read_text(encoding='utf-8')
+    i18n = (root / 'static' / 'i18n.js').read_text(encoding='utf-8')
+
+    for phrase in [
+        'const DONE_COLLAPSE_THRESHOLD = 8',
+        'const DONE_ACTIVE_DOMINANCE_MULTIPLIER = 2',
+        'function doneTasksDominateBoard',
+        'function doneColumnModeKey',
+        'function doneArchiveAction',
+        'data-done-archive-action',
+        "doneArchiveAction('recent'",
+        "doneArchiveAction('all'",
+        "doneArchiveAction('collapsed'",
+        'doneTasks.slice(0, DONE_COLLAPSE_THRESHOLD)',
+        "' is-compact-done'",
+    ]:
+        assert phrase in board
+
+    for key in [
+        'doneArchiveCollapsed',
+        'doneArchiveCollapsedHint',
+        'doneArchiveShowRecent',
+        'doneArchiveShowAll',
+        'doneArchiveHide',
+        'doneArchiveCount',
+    ]:
+        assert key in i18n
+
+    for css_contract in [
+        '.done-archive-summary',
+        '.done-archive-actions',
+        '.done-archive-actions button',
+        '.board-column.is-compact-done .cards',
+        'min-width: 0',
+        'overflow-wrap: anywhere',
+        'flex-wrap: wrap',
+    ]:
+        assert css_contract in style
+
+
 def test_static_javascript_parses():
     node = shutil.which('node')
     if not node:
