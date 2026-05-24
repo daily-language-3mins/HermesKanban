@@ -9,3 +9,4 @@ __pycache__/
 screenshot-*.png
 .kanban-worktrees/
 .worktrees/
+.kanban-review-*/
