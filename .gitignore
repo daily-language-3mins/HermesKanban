@@ -10,3 +10,4 @@ screenshot-*.png
 .kanban-worktrees/
 .worktrees/
 .kanban-review-*/
+docs/plans/issue-14-persist-card-ordering.md
