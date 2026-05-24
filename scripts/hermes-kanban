@@ -18,6 +18,7 @@ Commands:
   status                Show process status and health
   logs [tail-args]      Show the service log, e.g. logs -f
   doctor                Check local prerequisites and configuration
+  github-auth-preflight Check whether this runtime can post GitHub PR reviews
   open                  Open the WebUI URL in the desktop browser
   url                   Print the configured WebUI URL
   serve                 Run foreground server; intended for systemd
@@ -309,6 +310,26 @@ open_cmd() {
   fi
 }
 
+github_auth_preflight() {
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    info "[OK] GitHub PR review posting available: gh auth status succeeded."
+    return 0
+  fi
+
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    info "[OK] GitHub PR review posting available: GH_TOKEN is set."
+    return 0
+  fi
+
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    info "[OK] GitHub PR review posting available: GITHUB_TOKEN is set."
+    return 0
+  fi
+
+  info "[FAIL] GitHub PR review posting is blocked: run gh auth login in this Hermes profile runtime or export GH_TOKEN/GITHUB_TOKEN before dispatching reviewer tasks."
+  return 1
+}
+
 doctor_cmd() {
   source_env
   normalize_runtime_env
@@ -465,6 +486,7 @@ case "$cmd" in
   status) status_cmd "$@" ;;
   logs) logs_cmd "$@" ;;
   doctor) doctor_cmd "$@" ;;
+  github-auth-preflight) github_auth_preflight "$@" ;;
   open) open_cmd "$@" ;;
   url) url_cmd "$@" ;;
   serve) serve_cmd "$@" ;;

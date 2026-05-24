@@ -45,6 +45,23 @@ def test_complete_with_metadata_pr_url_creates_reviewer_task(client):
     assert 'github_review_url' in review['body'] or 'github_comment_url' in review['body']
 
 
+def test_auto_created_reviewer_task_requires_github_auth_preflight_before_local_review(client):
+    task_id = _create(client, 'Implement issue 54')
+
+    completed = client.post(f'/api/tasks/{task_id}/complete', json={'metadata': {'pr_url': PR_URL}, 'summary': 'PR opened'})
+
+    assert completed.status_code == 200, completed.text
+    review = _detail(client, _review_children(client, task_id)[0])['task']
+    body = review['body']
+    assert './scripts/hermes-kanban github-auth-preflight' in body
+    assert 'gh auth status' in body
+    assert 'gh auth login' in body
+    assert 'GH_TOKEN' in body
+    assert 'GITHUB_TOKEN' in body
+    assert 'GitHub PR review posting is blocked' in body
+    assert body.index('github-auth-preflight') < body.index('Read the PR body')
+
+
 def test_complete_with_summary_or_comment_pr_url_creates_reviewer_task(client):
     summary_task = _create(client, 'Implement summary PR detection')
     completed = client.post(f'/api/tasks/{summary_task}/complete', json={'summary': f'Opened {PR_URL}.'})
