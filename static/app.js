@@ -10,8 +10,17 @@ import { setupOperationsPanel, refreshOperationsPanel } from './operations.js?v=
 import { closeDrawer } from './drawer.js?v=20260522-zh-tw';
 import { state, setBoard, toast, queryBoard, querySearch } from './state.js?v=20260522-zh-tw';
 
-async function loadBoards() {
-  const data = await api.boards();
+function markStartup(name) {
+  if (typeof performance !== 'undefined' && typeof performance.mark === 'function') performance.mark(name);
+}
+
+function scheduleOptionalStartupTask(name, task) {
+  Promise.resolve()
+    .then(task)
+    .catch(err => console.warn(`optional startup ${name} failed`, err));
+}
+
+function applyBoards(data) {
   const select = document.getElementById('boardSelect');
   select.replaceChildren();
   for (const b of data.boards) {
@@ -84,8 +93,12 @@ function renderAssigneeControls(data) {
 }
 
 export async function load() {
-  await api.config().then(cfg => { state.config = cfg; });
-  await loadBoards();
+  markStartup('kanban:startup-begin');
+  const configPromise = api.config().then(cfg => { state.config = cfg; });
+  const boardsPromise = api.boards();
+  const [, boardsData] = await Promise.all([configPromise, boardsPromise]);
+  applyBoards(boardsData);
+  markStartup('kanban:config-and-boards-ready');
   const params = {
     board: state.board,
     include_archived: state.includeArchived,
@@ -93,6 +106,7 @@ export async function load() {
     assignee: state.assignee
   };
   const data = await api.board(params);
+  markStartup('kanban:board-data-ready');
   state.data = data;
   state.latestEventId = data.latest_event_id;
   renderAssigneeControls(data);
@@ -100,8 +114,9 @@ export async function load() {
   document.getElementById('boardDescription').textContent = data.board_meta.description || t('subtitle');
   renderKpis(data);
   renderBoard(data);
-  await refreshOperationsPanel();
-  await loadStatus();
+  markStartup('kanban:board-rendered');
+  scheduleOptionalStartupTask('operations', refreshOperationsPanel);
+  scheduleOptionalStartupTask('status', loadStatus);
 }
 
 function setupMoreActionsMenu() {
@@ -180,13 +195,14 @@ async function main() {
   setupDependencyControls();
   setupForms(load);
   setupMobileFallback();
-  setupAppUpdatePrompt();
+  const scheduleInitialUpdateCheck = setupAppUpdatePrompt({ deferInitialCheck: true });
   setupOperationsPanel();
   const storedAssignee = localStorage.getItem('lastAssignee') || '';
   const taskAssignee = document.getElementById('taskAssignee');
   if (taskAssignee) taskAssignee.value = storedAssignee;
   try {
     await load();
+    scheduleInitialUpdateCheck?.();
     pollEvents();
   } catch (err) {
     console.error(err);
