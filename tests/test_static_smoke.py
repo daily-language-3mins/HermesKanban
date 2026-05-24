@@ -114,6 +114,7 @@ def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
 
     assert '.kanban-worktrees/' in gitignore
     assert '.worktrees/' in gitignore
+    assert '.kanban-review-*/' in gitignore
     assert 'docs/plans/' not in gitignore
     assert 'docs/plans/issue-*.md' not in gitignore
 
