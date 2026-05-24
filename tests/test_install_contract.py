@@ -116,6 +116,25 @@ def test_readme_documents_one_command_install_and_management_flow():
         assert phrase in readme
 
 
+def test_static_install_docs_point_at_maintained_repository():
+    maintained_clone = "git clone https://github.com/daily-language-3mins/HermesKanban.git ~/.local/share/hermes-kanban"
+    stale_repository = "https://github.com/PriuS2/HermesKanban"
+
+    files = {
+        "README.md": read("README.md"),
+        "docs/INSTALL.md": read("docs/INSTALL.md"),
+        "pyproject.toml": read("pyproject.toml"),
+        "CHANGELOG.md": read("CHANGELOG.md"),
+    }
+
+    assert maintained_clone in files["README.md"]
+    assert maintained_clone in files["docs/INSTALL.md"]
+    assert 'Repository = "https://github.com/daily-language-3mins/HermesKanban"' in files["pyproject.toml"]
+
+    for rel, content in files.items():
+        assert stale_repository not in content, rel
+
+
 def test_readme_separates_hermes_core_and_webui_features_with_screenshots():
     readme = read("README.md")
 

@@ -94,7 +94,7 @@ export HERMES_AGENT_ROOT="$HOME/.hermes/hermes-agent"
 ## Quick install from Git
 
 ```bash
-git clone https://github.com/PriuS2/HermesKanban.git ~/.local/share/hermes-kanban
+git clone https://github.com/daily-language-3mins/HermesKanban.git ~/.local/share/hermes-kanban
 cd ~/.local/share/hermes-kanban
 ./scripts/install.sh
 hermes-kanban doctor
