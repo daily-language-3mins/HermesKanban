@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/PriuS2/HermesKanban"
+Repository = "https://github.com/daily-language-3mins/HermesKanban"
 
 [project.optional-dependencies]
 test = ["pytest", "httpx"]
