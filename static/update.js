@@ -105,17 +105,25 @@ async function applyUpdate(elements) {
   }
 }
 
-export function setupAppUpdatePrompt() {
+function scheduleInitialUpdateCheck() {
+  const schedule = window.requestIdleCallback || (callback => setTimeout(callback, 0));
+  schedule(() => checkForUpdates());
+}
+
+export function setupAppUpdatePrompt({ deferInitialCheck = false } = {}) {
   const elements = refs();
-  if (!elements) return;
+  if (!elements) return null;
   elements.later.addEventListener('click', () => {
     if (latestStatus?.remote_commit) localStorage.setItem(DISMISSED_UPDATE_KEY, latestStatus.remote_commit);
     elements.dialog.close();
   });
   elements.apply.addEventListener('click', () => applyUpdate(elements));
-  checkForUpdates();
+  if (!deferInitialCheck) {
+    checkForUpdates();
+  }
   setInterval(checkForUpdates, 300000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkForUpdates();
   });
+  return scheduleInitialUpdateCheck;
 }

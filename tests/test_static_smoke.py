@@ -22,6 +22,50 @@ def test_static_shell_contains_required_ui_contracts(client):
         assert (root / rel).is_file(), rel
 
 
+def test_startup_load_order_parallelizes_config_boards_and_defers_optional_metadata():
+    root = Path(__file__).resolve().parents[1]
+    app = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+    update = (root / 'static' / 'update.js').read_text(encoding='utf-8')
+
+    for contract in [
+        'function applyBoards(data)',
+        'const configPromise = api.config()',
+        'const boardsPromise = api.boards()',
+        'Promise.all([configPromise, boardsPromise])',
+        'markStartup(\'kanban:startup-begin\')',
+        'markStartup(\'kanban:config-and-boards-ready\')',
+        'markStartup(\'kanban:board-data-ready\')',
+        'markStartup(\'kanban:board-rendered\')',
+        'scheduleOptionalStartupTask(\'operations\', refreshOperationsPanel)',
+        'scheduleOptionalStartupTask(\'status\', loadStatus)',
+    ]:
+        assert contract in app
+
+    load_body = app.split('export async function load() {', 1)[1].split('\nfunction setupMoreActionsMenu()', 1)[0]
+    render_index = load_body.index('renderBoard(data)')
+    optional_index = load_body.index('scheduleOptionalStartupTask')
+    assert render_index < optional_index
+    assert 'await refreshOperationsPanel()' not in load_body
+    assert 'await loadStatus()' not in load_body
+
+    for board_contract in [
+        'activeQueryBoard',
+        "storedBoard === 'default'",
+        'fallbackBoard = data.current',
+        'setBoard(activeQueryBoard)',
+    ]:
+        assert board_contract in app
+
+    for update_contract in [
+        'deferInitialCheck = false',
+        'scheduleInitialUpdateCheck',
+        'requestIdleCallback',
+        'setTimeout',
+    ]:
+        assert update_contract in update
+    assert 'setupAppUpdatePrompt({ deferInitialCheck: true })' in app
+
+
 def test_app_update_static_contract():
     root = Path(__file__).resolve().parents[1]
     index = (root / 'static' / 'index.html').read_text(encoding='utf-8')
