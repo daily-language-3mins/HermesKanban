@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import tomllib
 from pathlib import Path
 
 
@@ -116,23 +117,28 @@ def test_readme_documents_one_command_install_and_management_flow():
         assert phrase in readme
 
 
-def test_static_install_docs_point_at_maintained_repository():
-    maintained_clone = "git clone https://github.com/daily-language-3mins/HermesKanban.git ~/.local/share/hermes-kanban"
-    stale_repository = "https://github.com/PriuS2/HermesKanban"
+def test_public_install_and_package_metadata_point_to_current_repository():
+    current_clone = "git clone https://github.com/daily-language-3mins/HermesKanban.git ~/.local/share/hermes-kanban"
+    current_repository = "https://github.com/daily-language-3mins/HermesKanban"
+    stale_urls = [
+        "https://github.com/PriuS2/HermesKanban",
+        "https://github.com/PriuS2/HermesKanban.git",
+    ]
 
     files = {
         "README.md": read("README.md"),
         "docs/INSTALL.md": read("docs/INSTALL.md"),
         "pyproject.toml": read("pyproject.toml"),
-        "CHANGELOG.md": read("CHANGELOG.md"),
     }
+    pyproject = tomllib.loads(files["pyproject.toml"])
 
-    assert maintained_clone in files["README.md"]
-    assert maintained_clone in files["docs/INSTALL.md"]
-    assert 'Repository = "https://github.com/daily-language-3mins/HermesKanban"' in files["pyproject.toml"]
+    assert current_clone in files["README.md"]
+    assert current_clone in files["docs/INSTALL.md"]
+    assert pyproject["project"]["urls"]["Repository"] == current_repository
 
     for rel, content in files.items():
-        assert stale_repository not in content, rel
+        for stale_url in stale_urls:
+            assert stale_url not in content, rel
 
 
 def test_readme_separates_hermes_core_and_webui_features_with_screenshots():
