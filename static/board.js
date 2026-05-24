@@ -38,8 +38,65 @@ function hermesSignals(task, parents, children) {
   return signals.join('');
 }
 
+const DONE_COLLAPSE_THRESHOLD = 8;
+const DONE_ACTIVE_DOMINANCE_MULTIPLIER = 2;
+const DONE_ARCHIVE_MODES = new Set(['collapsed', 'recent', 'all']);
 const expandedEmptyStatuses = new Set();
 let emptyColumnFocusDisabled = false;
+
+function doneColumnModeKey(data) {
+  return `kanbanDoneColumnMode:${data.board || 'default'}`;
+}
+
+function activeTaskCount(statuses, data) {
+  return statuses
+    .filter(status => !['done', 'archived'].includes(status))
+    .reduce((sum, status) => sum + (data.columns[status] || []).length, 0);
+}
+
+function doneTasksDominateBoard(statuses, data) {
+  const doneCount = (data.columns.done || []).length;
+  const activeCount = activeTaskCount(statuses, data);
+  return doneCount > DONE_COLLAPSE_THRESHOLD && doneCount > Math.max(activeCount * DONE_ACTIVE_DOMINANCE_MULTIPLIER, 0);
+}
+
+function getDoneArchiveMode(data) {
+  try {
+    const stored = localStorage.getItem(doneColumnModeKey(data));
+    return DONE_ARCHIVE_MODES.has(stored) ? stored : 'collapsed';
+  } catch (_err) {
+    return 'collapsed';
+  }
+}
+
+function setDoneArchiveMode(data, mode) {
+  if (!DONE_ARCHIVE_MODES.has(mode)) return;
+  try {
+    localStorage.setItem(doneColumnModeKey(data), mode);
+  } catch (_err) {
+    // Storage can be unavailable in private/embedded contexts; the next render falls back safely.
+  }
+}
+
+function doneArchiveAction(action, label, count = '') {
+  return `<button type="button" class="button ghost" data-done-archive-action="${escapeHtml(action)}" aria-label="${escapeHtml(label)}"><span>${escapeHtml(label)}</span>${count !== '' ? `<strong>${escapeHtml(String(count))}</strong>` : ''}</button>`;
+}
+
+function doneArchiveSummary(doneTasks, mode) {
+  const total = doneTasks.length;
+  const visibleCount = mode === 'all' ? total : (mode === 'recent' ? Math.min(total, DONE_COLLAPSE_THRESHOLD) : 0);
+  const countLabel = t('doneArchiveCount').replace('{count}', total).replace('{visible}', visibleCount);
+  const actions = [
+    mode !== 'recent' ? doneArchiveAction('recent', t('doneArchiveShowRecent'), Math.min(total, DONE_COLLAPSE_THRESHOLD)) : '',
+    mode !== 'all' ? doneArchiveAction('all', t('doneArchiveShowAll'), total) : '',
+    mode !== 'collapsed' ? doneArchiveAction('collapsed', t('doneArchiveHide')) : '',
+  ].filter(Boolean).join('');
+  return `<aside class="done-archive-summary" aria-label="${escapeHtml(t('doneArchiveCollapsed'))}">
+    <div><strong>${escapeHtml(t('doneArchiveCollapsed'))}</strong><span>${escapeHtml(countLabel)}</span></div>
+    <p>${escapeHtml(t('doneArchiveCollapsedHint'))}</p>
+    <div class="done-archive-actions">${actions}</div>
+  </aside>`;
+}
 
 function shouldFocusNonEmptyColumns(statuses, data) {
   const populatedStatuses = statuses.filter(status => (data.columns[status] || []).length > 0);
@@ -116,6 +173,8 @@ export function renderBoard(data) {
   const columnNav = document.getElementById('columnNav');
   const statuses = data.column_order || [];
   const focusEmptyColumns = shouldFocusNonEmptyColumns(statuses, data);
+  const doneDominates = doneTasksDominateBoard(statuses, data);
+  const doneMode = doneDominates ? getDoneArchiveMode(data) : 'all';
   const collapsedStatuses = focusEmptyColumns
     ? statuses.filter(status => !(data.columns[status] || []).length && !expandedEmptyStatuses.has(status))
     : [];
@@ -159,12 +218,20 @@ export function renderBoard(data) {
   }
   root.innerHTML = visibleStatuses.map(status => {
     const tasks = data.columns[status] || [];
+    const doneTasks = status === 'done' ? tasks : [];
+    const compactDone = status === 'done' && doneDominates;
+    const renderedTasks = compactDone && doneMode !== 'all'
+      ? (doneMode === 'recent' ? doneTasks.slice(0, DONE_COLLAPSE_THRESHOLD) : [])
+      : tasks;
     const addLabel = escapeHtml(`${t('addTaskToColumn')}: ${t(status)}`);
     const emptyHint = escapeHtml(t('emptyColumnHint'));
-    return `<section class="board-column" id="column-${escapeHtml(status)}" data-status="${escapeHtml(status)}" data-empty-column="${tasks.length ? 'false' : 'true'}">
+    const archiveSummary = compactDone ? doneArchiveSummary(doneTasks, doneMode) : '';
+    const emptyCard = status === 'done' && compactDone ? '' : `<div class="empty empty-column-card"><strong>${escapeHtml(t('empty'))}</strong><span>${emptyHint}</span></div>`;
+    const cardsMarkup = renderedTasks.length ? renderedTasks.map(card).join('') : emptyCard;
+    return `<section class="board-column${compactDone ? ' is-compact-done' : ''}" id="column-${escapeHtml(status)}" data-status="${escapeHtml(status)}" data-empty-column="${tasks.length ? 'false' : 'true'}" data-done-archive-mode="${compactDone ? escapeHtml(doneMode) : ''}">
       <header><div><h2>${escapeHtml(t(status))}</h2><small>${tasks.length}</small></div><button class="mini-add" data-status="${escapeHtml(status)}" aria-label="${addLabel}" title="${addLabel}">＋</button></header>
       <div class="drop-placeholder"></div>
-      <div class="cards">${tasks.length ? tasks.map(card).join('') : `<div class="empty empty-column-card"><strong>${escapeHtml(t('empty'))}</strong><span>${emptyHint}</span></div>`}</div>
+      <div class="cards">${archiveSummary}${cardsMarkup}</div>
     </section>`;
   }).join('') + emptyColumnDock(collapsedStatuses);
   root.querySelectorAll('.task-card').forEach(el => {
@@ -189,6 +256,11 @@ export function renderBoard(data) {
     expandedEmptyStatuses.add(btn.dataset.revealColumn);
     renderBoard(data);
     requestAnimationFrame(() => document.getElementById(`column-${btn.dataset.revealColumn}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }));
+  }));
+  root.querySelectorAll('[data-done-archive-action]').forEach(btn => btn.addEventListener('click', () => {
+    setDoneArchiveMode(data, btn.dataset.doneArchiveAction);
+    renderBoard(data);
+    requestAnimationFrame(() => document.getElementById('column-done')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }));
   }));
   root.querySelectorAll('.mini-add').forEach(btn => btn.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('kanban:open-task-create', { detail: { status: btn.dataset.status } }));

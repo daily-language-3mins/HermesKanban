@@ -100,6 +100,14 @@ textarea { width: 100%; resize: vertical; }
 .task-card.running { background: var(--running); }
 .task-card.blocked { background: var(--blocked); }
 .task-card.done { background: var(--done); }
+.board-column.is-compact-done .cards { align-content: start; min-width: 0; }
+.done-archive-summary { display: grid; gap: 10px; min-width: 0; border: 1px dashed color-mix(in srgb, var(--status-done) 45%, var(--hairline)); border-radius: 16px; padding: 14px; background: color-mix(in srgb, var(--surface-strong) 82%, var(--status-done) 10%); color: var(--muted); overflow-wrap: anywhere; }
+.done-archive-summary > div:first-child { display: grid; gap: 4px; min-width: 0; }
+.done-archive-summary strong { color: var(--ink); }
+.done-archive-summary p { margin: 0; font-size: 12.5px; line-height: 1.45; }
+.done-archive-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.done-archive-actions button { min-width: 0; display: inline-flex; align-items: center; gap: 6px; white-space: normal; }
+.done-archive-actions button strong { border-radius: 999px; padding: 2px 7px; background: var(--chip-bg); color: var(--muted); font-size: 12px; }
 .card-top, .card-foot, .chips, .card-primary-meta, .card-secondary-meta, .card-hermes-signals { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 .card-top code, .drawer code { font-family: var(--font-mono); color: var(--link); font-size: 12px; }
 .task-status-pill { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 1px solid color-mix(in srgb, var(--column-accent) 42%, var(--hairline)); border-radius: 999px; padding: 3px 7px; background: color-mix(in srgb, var(--surface-strong) 76%, var(--column-accent) 12%); color: var(--ink); font-size: 11px; font-weight: 900; line-height: 1; white-space: nowrap; }
