@@ -108,6 +108,30 @@ def test_app_update_static_contract():
         assert css_class in style
 
 
+def test_ci_workflow_avoids_duplicate_feature_branch_push_runs():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / '.github' / 'workflows' / 'ci.yml').read_text(encoding='utf-8')
+
+    assert '\n  pull_request:' in workflow
+    assert '\n  workflow_dispatch:' in workflow
+
+    push_start = workflow.index('\n  push:')
+    next_trigger_positions = [
+        workflow.index(trigger, push_start + 1)
+        for trigger in ['\n  pull_request:', '\n  workflow_dispatch:']
+        if trigger in workflow[push_start + 1:]
+    ]
+    push_block = workflow[push_start:min(next_trigger_positions)]
+
+    assert 'branches:' in push_block
+    assert '- main' in push_block
+    assert 'tags:' in push_block
+    assert "- 'v*'" in push_block or '- "v*"' in push_block or '- v*' in push_block
+    assert "- '*'" not in push_block
+    assert "- '**'" not in push_block
+    assert '- feature/**' not in push_block
+
+
 def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
     root = Path(__file__).resolve().parents[1]
     gitignore = (root / '.gitignore').read_text(encoding='utf-8').splitlines()
