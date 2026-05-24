@@ -24,6 +24,7 @@ from .ui_registry import registry
 from .config import get_settings
 from . import app_update, workflow_drafts, workflow_planner, workflows
 from .operations import build_operations_summary
+from .pr_review_automation import reconcile_pr_review_tasks, validate_review_completion_payload
 
 router = APIRouter(prefix="/api")
 
@@ -765,6 +766,10 @@ def _apply_task_update(conn, task_id: str, payload: UpdateTaskBody) -> dict[str,
     if payload.status is not None:
         status = payload.status
         if status == "done":
+            try:
+                validate_review_completion_payload(task, summary=payload.summary, result=payload.result, metadata=payload.metadata)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             ok = kanban_db.complete_task(
                 conn,
                 task_id,
@@ -812,6 +817,8 @@ def _task_detail(conn, task_id: str, *, board: str) -> dict[str, Any]:
     task = kanban_db.get_task(conn, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+    reconcile_pr_review_tasks(conn, task_ids=[task_id], board=board)
+    task = kanban_db.get_task(conn, task_id)
     return {
         "task": task_dict(task),
         "links": links_for(conn, task_id),
@@ -1219,6 +1226,12 @@ def board_view(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         tasks = _ordered_tasks(conn, tasks)
+        reconcile_pr_review_tasks(conn, task_ids=[task.id for task in tasks if task.status == "done"], board=selected)
+        tasks = kanban_db.list_tasks(
+            conn,
+            include_archived=include_archived,
+        )
+        tasks = _ordered_tasks(conn, tasks)
         if assignee:
             tasks = [task for task in tasks if task.assignee == assignee]
         if status:
@@ -1599,7 +1612,24 @@ def complete_task(task_id: str, payload: CompleteBody, board: Optional[str] = Qu
     try:
         results = []
         for item_id in _all_ids(task_id, payload.ids):
+            task = kanban_db.get_task(conn, item_id)
+            if task is None:
+                results.append({"task_id": item_id, "ok": False})
+                continue
+            try:
+                validate_review_completion_payload(task, summary=payload.summary, result=payload.result, metadata=payload.metadata)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             ok = kanban_db.complete_task(conn, item_id, result=payload.result, summary=payload.summary, metadata=payload.metadata)
+            if ok:
+                reconcile_pr_review_tasks(
+                    conn,
+                    task_ids=[item_id],
+                    board=selected,
+                    extra_summary=payload.summary,
+                    extra_result=payload.result,
+                    extra_metadata=payload.metadata,
+                )
             results.append({"task_id": item_id, "ok": ok})
         return {"results": results}
     finally:
@@ -1668,6 +1698,16 @@ def bulk_update(payload: BulkTaskBody, board: Optional[str] = Query(None)) -> di
                     block_reason=payload.reason,
                 )
                 task = _apply_task_update(conn, task_id, task_payload)
+                if payload.status == "done":
+                    reconcile_pr_review_tasks(
+                        conn,
+                        task_ids=[task_id],
+                        board=selected,
+                        extra_summary=payload.summary,
+                        extra_result=payload.result,
+                        extra_metadata=payload.metadata,
+                    )
+                    task = task_dict(kanban_db.get_task(conn, task_id))
                 results.append({"task_id": task_id, "ok": True, "task": task})
             except Exception as exc:
                 results.append({"task_id": task_id, "ok": False, "error": str(exc)})
