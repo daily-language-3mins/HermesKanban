@@ -129,15 +129,17 @@ PR URL: {pr.url}
 Repository/PR: {pr.label}
 
 Hard requirements for the reviewer:
-1. Before local review work, run `./scripts/hermes-kanban github-auth-preflight` in this reviewer runtime/worktree to confirm GitHub posting capability. It accepts successful `gh auth status`, non-empty `GH_TOKEN`, or non-empty `GITHUB_TOKEN`.
-   - If preflight fails, block early with its printed message: `GitHub PR review posting is blocked: run gh auth login in this Hermes profile runtime or export GH_TOKEN/GITHUB_TOKEN before dispatching reviewer tasks.` Do this before reading the diff/tests so missing auth is surfaced without wasting review time.
-2. Read the PR body, changed diff, and relevant CI/check results before deciding.
-3. Run or verify local tests where relevant; record exact commands in Kanban metadata.tests_run.
-4. Post the review result on GitHub, not only in Kanban. Use a GitHub PR review when possible.
-5. Clean result must include `LGTM`. Approve the PR if GitHub permits it.
-6. If GitHub disallows self-approval or API approval, treat that as non-fatal: post a clear LGTM GitHub comment explaining the self-approval restriction and include that comment URL in Kanban.
-7. If findings exist, include concrete file/line/reason/suggested fix where possible.
-8. Complete this Kanban task with machine-readable metadata using this schema:
+0. Before local review work, verify GitHub auth and PR access from this spawned reviewer profile/runtime, not from the maintainer/default shell:
+   - Run `gh auth status` and `gh pr view {pr.url} --json url,number,headRefName,baseRefName` (or the repo-owned `./scripts/hermes-kanban github-auth-preflight` helper) before reading the diff/tests.
+   - If preflight fails, do not spend time on local review. Immediately block, or complete with metadata.review_status = `unable_to_review`, and include the exact remediation: configure GitHub auth in this reviewer profile with `gh auth login` then `gh auth setup-git`, or provide `GH_TOKEN`/`GITHUB_TOKEN` in the reviewer profile/runtime environment before dispatching reviewer tasks. Use the gh CLI/profile credential path only.
+   - The blocker message should include `GitHub PR review posting is blocked` so the maintainer can distinguish reviewer-profile auth mismatch from a code review finding.
+1. Read the PR body, changed diff, and relevant CI/check results before deciding.
+2. Run or verify local tests where relevant; record exact commands in Kanban metadata.tests_run.
+3. Post the review result on GitHub, not only in Kanban. Use a GitHub PR review when possible.
+4. Clean result must include `LGTM`. Approve the PR if GitHub permits it.
+5. If GitHub disallows self-approval or API approval, treat that as non-fatal: post a clear LGTM GitHub comment explaining the self-approval restriction and include that comment URL in Kanban.
+6. If findings exist, include concrete file/line/reason/suggested fix where possible.
+7. Complete this Kanban task with machine-readable metadata using this schema:
    - review_status: {REVIEW_STATUSES}
    - pr_url: {pr.url}
    - github_review_url or github_comment_url: URL proving the GitHub-visible result was posted
