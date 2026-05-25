@@ -143,6 +143,29 @@ def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
     assert 'docs/plans/' not in gitignore
     assert 'docs/plans/issue-*.md' not in gitignore
 
+    ignored_paths = [
+        '.kanban-worktrees/example',
+        '.worktrees/example',
+        '.kanban-review-t_example-pr56/',
+    ]
+    for rel_path in ignored_paths:
+        assert subprocess.run(
+            ['git', 'check-ignore', '--quiet', rel_path],
+            cwd=root,
+            check=False,
+        ).returncode == 0, rel_path
+
+    visible_plan_docs = [
+        'docs/plans/example.md',
+        'docs/plans/issue-56-example.md',
+    ]
+    for rel_path in visible_plan_docs:
+        assert subprocess.run(
+            ['git', 'check-ignore', '--quiet', rel_path],
+            cwd=root,
+            check=False,
+        ).returncode == 1, rel_path
+
 
 def test_done_column_compacts_dominating_history_by_default():
     root = Path(__file__).resolve().parents[1]
