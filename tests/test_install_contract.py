@@ -74,6 +74,67 @@ def test_hermes_kanban_wrapper_exposes_lifecycle_doctor_service_commands():
         assert phrase in wrapper
 
 
+def test_hermes_kanban_wrapper_exposes_github_auth_preflight_contract():
+    wrapper = read("scripts/hermes-kanban")
+
+    for phrase in [
+        "github-auth-preflight)",
+        "github_auth_preflight",
+        "gh auth status",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GitHub PR review posting is blocked",
+        "gh auth login",
+    ]:
+        assert phrase in wrapper
+
+    assert "Authorization: token" not in wrapper
+    assert "Authorization: Bearer" not in wrapper
+
+
+def test_github_auth_preflight_accepts_token_env_without_printing_secret(tmp_path):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    secret = "ghp_should_not_be_printed"
+
+    result = subprocess.run(
+        ["/usr/bin/bash", "scripts/hermes-kanban", "github-auth-preflight"],
+        cwd=ROOT,
+        env={"HOME": str(fake_home), "PATH": str(tmp_path), "GH_TOKEN": secret},
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+
+    assert "[OK]" in result.stdout
+    assert "GH_TOKEN" in result.stdout
+    assert secret not in result.stdout
+    assert secret not in result.stderr
+
+
+def test_github_auth_preflight_fails_actionably_without_gh_or_token(tmp_path):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+
+    result = subprocess.run(
+        ["/usr/bin/bash", "scripts/hermes-kanban", "github-auth-preflight"],
+        cwd=ROOT,
+        env={"HOME": str(fake_home), "PATH": str(tmp_path)},
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "[FAIL]" in result.stdout
+    assert "GitHub PR review posting is blocked" in result.stdout
+    assert "gh auth login" in result.stdout
+    assert "GH_TOKEN" in result.stdout
+    assert "GITHUB_TOKEN" in result.stdout
+
+
 def test_hermes_kanban_restart_can_continue_after_stop_helper():
     wrapper = read("scripts/hermes-kanban")
 
@@ -115,6 +176,18 @@ def test_readme_documents_one_command_install_and_management_flow():
         "~/.local/bin/hermes-kanban",
     ]:
         assert phrase in readme
+
+
+def test_docs_explain_automatic_pr_review_github_auth_preflight():
+    readme = read("README.md")
+    troubleshooting = read("docs/TROUBLESHOOTING.md")
+
+    for content in [readme, troubleshooting]:
+        assert "github-auth-preflight" in content
+        assert "gh auth login" in content
+        assert "GH_TOKEN" in content
+        assert "GITHUB_TOKEN" in content
+        assert "GitHub PR review posting is blocked" in content
 
 
 def test_public_install_and_package_metadata_point_to_current_repository():

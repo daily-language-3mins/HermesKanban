@@ -129,13 +129,15 @@ PR URL: {pr.url}
 Repository/PR: {pr.label}
 
 Hard requirements for the reviewer:
-1. Read the PR body, changed diff, and relevant CI/check results before deciding.
-2. Run or verify local tests where relevant; record exact commands in Kanban metadata.tests_run.
-3. Post the review result on GitHub, not only in Kanban. Use a GitHub PR review when possible.
-4. Clean result must include `LGTM`. Approve the PR if GitHub permits it.
-5. If GitHub disallows self-approval or API approval, treat that as non-fatal: post a clear LGTM GitHub comment explaining the self-approval restriction and include that comment URL in Kanban.
-6. If findings exist, include concrete file/line/reason/suggested fix where possible.
-7. Complete this Kanban task with machine-readable metadata using this schema:
+1. Before local review work, run `./scripts/hermes-kanban github-auth-preflight` in this reviewer runtime/worktree to confirm GitHub posting capability. It accepts successful `gh auth status`, non-empty `GH_TOKEN`, or non-empty `GITHUB_TOKEN`.
+   - If preflight fails, block early with its printed message: `GitHub PR review posting is blocked: run gh auth login in this Hermes profile runtime or export GH_TOKEN/GITHUB_TOKEN before dispatching reviewer tasks.` Do this before reading the diff/tests so missing auth is surfaced without wasting review time.
+2. Read the PR body, changed diff, and relevant CI/check results before deciding.
+3. Run or verify local tests where relevant; record exact commands in Kanban metadata.tests_run.
+4. Post the review result on GitHub, not only in Kanban. Use a GitHub PR review when possible.
+5. Clean result must include `LGTM`. Approve the PR if GitHub permits it.
+6. If GitHub disallows self-approval or API approval, treat that as non-fatal: post a clear LGTM GitHub comment explaining the self-approval restriction and include that comment URL in Kanban.
+7. If findings exist, include concrete file/line/reason/suggested fix where possible.
+8. Complete this Kanban task with machine-readable metadata using this schema:
    - review_status: {REVIEW_STATUSES}
    - pr_url: {pr.url}
    - github_review_url or github_comment_url: URL proving the GitHub-visible result was posted

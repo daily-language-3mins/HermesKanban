@@ -78,6 +78,23 @@ Common causes:
 - Hermes CLI cannot chat from that profile because model/auth config is missing.
 - The planner returned non-JSON or JSON that does not match the workflow schema.
 
+## Automatic PR review cannot post to GitHub
+
+Automatic reviewer tasks must post their final review/comment on GitHub. Run the
+preflight in the same reviewer profile runtime and worktree before local review
+work:
+
+```bash
+./scripts/hermes-kanban github-auth-preflight
+```
+
+Success means `gh auth status` worked, or `GH_TOKEN`/`GITHUB_TOKEN` is available
+in that runtime. If it prints `GitHub PR review posting is blocked`, block the
+review task with the printed message. Fix by running `gh auth login` in that
+Hermes profile runtime, or by exporting `GH_TOKEN`/`GITHUB_TOKEN` through normal
+Hermes/profile environment configuration before dispatching reviewer tasks. Do
+not paste token values into Kanban comments, logs, or docs.
+
 Verify the profile outside the WebUI:
 
 ```bash

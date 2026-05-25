@@ -75,6 +75,25 @@ Kanban data:
 - Safe in-app update prompt for clone-based installs: the WebUI checks
   `origin/main`, lists incoming commits, and only applies fast-forward updates
   from a clean local `main` checkout.
+- Automatic PR review tasks require reviewers to run
+  `./scripts/hermes-kanban github-auth-preflight` before local review work so
+  missing GitHub posting auth is surfaced early.
+
+### Automatic PR review GitHub auth preflight
+
+Reviewer tasks created from implementation PR handoffs must post their result on
+GitHub, not only in Kanban. Before reading the diff or running tests, run:
+
+```bash
+./scripts/hermes-kanban github-auth-preflight
+```
+
+The preflight succeeds when this exact reviewer runtime has authenticated `gh`
+(`gh auth status`) or a non-empty `GH_TOKEN`/`GITHUB_TOKEN`. If it prints
+`GitHub PR review posting is blocked`, block the Kanban review task with that
+actionable message and fix the runtime with `gh auth login` or by exporting
+`GH_TOKEN`/`GITHUB_TOKEN` through normal Hermes/profile environment handling.
+Do not paste token values into task comments or logs.
 
 ## Requirements
 
