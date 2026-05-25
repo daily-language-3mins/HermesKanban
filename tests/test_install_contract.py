@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 import tomllib
@@ -188,6 +189,24 @@ def test_docs_explain_automatic_pr_review_github_auth_preflight():
         assert "GH_TOKEN" in content
         assert "GITHUB_TOKEN" in content
         assert "GitHub PR review posting is blocked" in content
+
+
+def test_readme_quick_install_clone_url_matches_project_repository():
+    readme = read("README.md")
+    pyproject = tomllib.loads(read("pyproject.toml"))
+    repository = pyproject["project"]["urls"]["Repository"]
+
+    quick_install = re.search(
+        r"## Quick install from Git\n\n```bash\n(?P<body>.*?)\n```",
+        readme,
+        re.DOTALL,
+    )
+
+    assert quick_install is not None
+    assert (
+        f"git clone {repository}.git ~/.local/share/hermes-kanban"
+        in quick_install.group("body")
+    )
 
 
 def test_public_install_and_package_metadata_point_to_current_repository():
