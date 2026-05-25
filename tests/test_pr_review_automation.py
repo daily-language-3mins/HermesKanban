@@ -62,6 +62,25 @@ def test_auto_created_reviewer_task_requires_github_auth_preflight_before_local_
     assert body.index('github-auth-preflight') < body.index('Read the PR body')
 
 
+def test_auto_review_task_names_actionable_profile_auth_preflight_before_review_work(client):
+    task_id = _create(client, 'Implement issue 60')
+
+    completed = client.post(f'/api/tasks/{task_id}/complete', json={'metadata': {'pr_url': PR_URL}, 'summary': 'PR opened'})
+
+    assert completed.status_code == 200, completed.text
+    review = _detail(client, _review_children(client, task_id)[0])['task']
+    body = review['body']
+    assert 'gh auth status' in body
+    assert f'gh pr view {PR_URL} --json url,number,headRefName,baseRefName' in body
+    assert 'gh auth setup-git' in body
+    assert 'GH_TOKEN' in body
+    assert 'GITHUB_TOKEN' in body
+    assert 'reviewer profile' in body
+    assert 'unable_to_review' in body
+    assert 'raw HTTP auth headers' not in body
+    assert body.index('gh auth status') < body.index('Read the PR body')
+
+
 def test_complete_with_summary_or_comment_pr_url_creates_reviewer_task(client):
     summary_task = _create(client, 'Implement summary PR detection')
     completed = client.post(f'/api/tasks/{summary_task}/complete', json={'summary': f'Opened {PR_URL}.'})
