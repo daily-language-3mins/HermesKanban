@@ -139,14 +139,14 @@ def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
     assert '.kanban-worktrees/' in gitignore
     assert '.worktrees/' in gitignore
     assert '.kanban-review-*/' in gitignore
-    assert 'docs/plans/issue-14-persist-card-ordering.md' in gitignore
     assert 'docs/plans/' not in gitignore
     assert 'docs/plans/issue-*.md' not in gitignore
+    assert 'docs/plans/issue-14-persist-card-ordering.md' not in gitignore
 
     ignored_paths = [
-        '.kanban-worktrees/example',
-        '.worktrees/example',
-        '.kanban-review-t_example-pr56/',
+        '.kanban-worktrees/example/file',
+        '.worktrees/example/file',
+        '.kanban-review-example/file',
     ]
     for rel_path in ignored_paths:
         assert subprocess.run(
@@ -158,6 +158,7 @@ def test_local_kanban_worktree_artifacts_are_ignored_without_hiding_plan_docs():
     visible_plan_docs = [
         'docs/plans/example.md',
         'docs/plans/issue-56-example.md',
+        'docs/plans/issue-14-persist-card-ordering.md',
     ]
     for rel_path in visible_plan_docs:
         assert subprocess.run(

@@ -12,6 +12,3 @@ screenshot-*.png
 .kanban-worktrees/
 .worktrees/
 .kanban-review-*/
-
-# Ignore only this stale generated plan, not intentional docs/plans/*.md artifacts.
-docs/plans/issue-14-persist-card-ordering.md
