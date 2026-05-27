@@ -11,7 +11,7 @@ import pytest
 
 def test_static_shell_contains_required_ui_contracts(client):
     index = client.get('/').text
-    assert 'Hermes KanbanWebUI' in index
+    assert '<title>Hermes Kanban WebUI</title>' in index
     assert 'langToggle' in index
     assert 'boardSelect' in index
     assert 'taskCreateBtn' in index
